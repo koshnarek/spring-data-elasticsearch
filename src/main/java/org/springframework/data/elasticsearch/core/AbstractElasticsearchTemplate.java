@@ -44,6 +44,7 @@ import org.springframework.data.elasticsearch.core.mapping.SimpleElasticsearchMa
 import org.springframework.data.elasticsearch.core.query.BulkOptions;
 import org.springframework.data.elasticsearch.core.query.ByQueryResponse;
 import org.springframework.data.elasticsearch.core.query.IndexQuery;
+import org.springframework.data.elasticsearch.core.query.IndexQuery.OpType;
 import org.springframework.data.elasticsearch.core.query.IndexQueryBuilder;
 import org.springframework.data.elasticsearch.core.query.MoreLikeThisQuery;
 import org.springframework.data.elasticsearch.core.query.Query;
@@ -608,7 +609,13 @@ public abstract class AbstractElasticsearchTemplate implements ElasticsearchOper
 			builder.withRouting(routing);
 		}
 
+		builder.withOpType(getEntityOptType(entity));
+
 		return builder.build();
+	}
+
+	private OpType getEntityOptType(Object entity) {
+	 	return entity.getClass().getAnnotation(org.springframework.data.elasticsearch.annotations.Document.class).optType();
 	}
 
 	protected <T> SearchDocumentResponse.EntityCreator<T> getEntityCreator(ReadDocumentCallback<T> documentCallback) {

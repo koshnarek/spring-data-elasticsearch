@@ -22,6 +22,7 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 import org.springframework.data.annotation.Persistent;
+import org.springframework.data.elasticsearch.core.query.IndexQuery.OpType;
 
 /**
  * Identifies a domain object to be persisted to Elasticsearch.
@@ -92,6 +93,12 @@ public @interface Document {
 	 * @since 5.1
 	 */
 	boolean storeVersionInSource() default true;
+
+	/**
+	 * Specifies the OpType for the index operation. Default value is Optype.INDEX. {@see Optype}.
+	 * 
+	 */
+	OpType optType() default OpType.INDEX;
 
 	/**
 	 * @since 4.3
