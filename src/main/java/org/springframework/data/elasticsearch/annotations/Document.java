@@ -22,7 +22,6 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 import org.springframework.data.annotation.Persistent;
-import org.springframework.data.elasticsearch.core.query.IndexQuery.OpType;
 
 /**
  * Identifies a domain object to be persisted to Elasticsearch.
@@ -102,10 +101,9 @@ public @interface Document {
 	boolean storeVersionInSource() default true;
 
 	/**
-	 * Specifies the OpType for the index operation. Default value is Optype.INDEX. {@see Optype}.
-	 * 
+	 * Specifies if Elasticsearch document is stored in a dataStream. Default value is false.
 	 */
-	OpType optType() default OpType.INDEX;
+	boolean dataStream() default false;
 
 	/**
 	 * @since 4.3

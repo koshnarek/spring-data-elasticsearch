@@ -577,7 +577,10 @@ public abstract class AbstractElasticsearchTemplate implements ElasticsearchOper
 	}
 
 	private OpType getEntityOptType(Object entity) {
-	 	return entity.getClass().getAnnotation(org.springframework.data.elasticsearch.annotations.Document.class).optType();
+	 	if (entity.getClass().getAnnotation(org.springframework.data.elasticsearch.annotations.Document.class).dataStream()) {
+			return OpType.CREATE;
+		}
+		return OpType.INDEX;
 	}
 
 	protected <T> SearchDocumentResponse.EntityCreator<T> getEntityCreator(ReadDocumentCallback<T> documentCallback) {
