@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2023 the original author or authors.
+ * Copyright 2013-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -187,4 +187,10 @@ public interface ElasticsearchPersistentEntity<T> extends PersistentEntity<T, El
 	 * @since 5.1
 	 */
 	boolean storeVersionInSource();
+
+	/**
+	 * @return if the mapping should be written to the index on repositry bootstrap even if the index already exists.
+	 * @since 5.2
+	 */
+	boolean isAlwaysWriteMapping();
 }

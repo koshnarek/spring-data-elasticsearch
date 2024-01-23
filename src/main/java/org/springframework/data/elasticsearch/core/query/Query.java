@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2023 the original author or authors.
+ * Copyright 2013-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -469,7 +469,7 @@ public interface Query {
 	/**
 	 * @since 5.1
 	 */
-	EnumSet<IndicesOptions.WildcardStates> getExpandWildcards();
+	@Nullable EnumSet<IndicesOptions.WildcardStates> getExpandWildcards();
 
 	/**
 	 * @return a possible empty list of docvalue_field values to be set on the query.

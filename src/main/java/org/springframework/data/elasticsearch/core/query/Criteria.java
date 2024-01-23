@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2023 the original author or authors.
+ * Copyright 2013-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -387,7 +387,7 @@ public class Criteria {
 
 		Assert.notNull(s, "s may not be null");
 
-		assertNoBlankInWildcardQuery(s, true, false);
+		assertNoBlankInWildcardQuery(s, false, true);
 		queryCriteriaEntries.add(new CriteriaEntry(OperationKey.STARTS_WITH, s));
 		return this;
 	}
@@ -419,7 +419,7 @@ public class Criteria {
 
 		Assert.notNull(s, "s may not be null");
 
-		assertNoBlankInWildcardQuery(s, false, true);
+		assertNoBlankInWildcardQuery(s, true, false);
 		queryCriteriaEntries.add(new CriteriaEntry(OperationKey.ENDS_WITH, s));
 		return this;
 	}

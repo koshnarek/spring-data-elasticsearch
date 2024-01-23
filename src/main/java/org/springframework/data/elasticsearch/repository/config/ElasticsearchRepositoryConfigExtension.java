@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2023 the original author or authors.
+ * Copyright 2013-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,6 +19,7 @@ import java.lang.annotation.Annotation;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.List;
 import java.util.Locale;
 
 import org.springframework.beans.factory.support.BeanDefinitionBuilder;
@@ -41,6 +42,7 @@ import org.w3c.dom.Element;
  * @author Mohsin Husen
  * @author Mark Paluch
  * @author Christoph Strobl
+ * @author Junghoon Ban
  */
 public class ElasticsearchRepositoryConfigExtension extends RepositoryConfigurationExtensionSupport {
 
@@ -106,7 +108,7 @@ public class ElasticsearchRepositoryConfigExtension extends RepositoryConfigurat
 	*/
 	@Override
 	protected Collection<Class<?>> getIdentifyingTypes() {
-		return Arrays.asList(ElasticsearchRepository.class, ElasticsearchRepository.class);
+		return List.of(ElasticsearchRepository.class);
 	}
 
 	/*

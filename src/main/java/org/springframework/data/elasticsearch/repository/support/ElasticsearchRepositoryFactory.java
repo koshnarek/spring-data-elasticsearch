@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2023 the original author or authors.
+ * Copyright 2013-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,6 +14,11 @@
  * limitations under the License.
  */
 package org.springframework.data.elasticsearch.repository.support;
+
+import static org.springframework.data.querydsl.QuerydslUtils.*;
+
+import java.lang.reflect.Method;
+import java.util.Optional;
 
 import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
 import org.springframework.data.elasticsearch.repository.ElasticsearchRepository;
@@ -37,11 +42,6 @@ import org.springframework.data.repository.query.RepositoryQuery;
 import org.springframework.lang.Nullable;
 import org.springframework.util.Assert;
 
-import java.lang.reflect.Method;
-import java.util.Optional;
-
-import static org.springframework.data.querydsl.QuerydslUtils.QUERY_DSL_PRESENT;
-
 /**
  * Factory to create {@link ElasticsearchRepository}
  *
@@ -54,6 +54,7 @@ import static org.springframework.data.querydsl.QuerydslUtils.QUERY_DSL_PRESENT;
  * @author Sascha Woo
  * @author Peter-Josef Meisch
  * @author Ezequiel Antúnez Camacho
+ * @author Haibo Liu
  */
 public class ElasticsearchRepositoryFactory extends RepositoryFactorySupport {
 
@@ -96,10 +97,16 @@ public class ElasticsearchRepositoryFactory extends RepositoryFactorySupport {
 	@Override
 	protected Optional<QueryLookupStrategy> getQueryLookupStrategy(@Nullable Key key,
 			QueryMethodEvaluationContextProvider evaluationContextProvider) {
-		return Optional.of(new ElasticsearchQueryLookupStrategy());
+		return Optional.of(new ElasticsearchQueryLookupStrategy(evaluationContextProvider));
 	}
 
 	private class ElasticsearchQueryLookupStrategy implements QueryLookupStrategy {
+
+		private final QueryMethodEvaluationContextProvider evaluationContextProvider;
+
+		ElasticsearchQueryLookupStrategy(QueryMethodEvaluationContextProvider evaluationContextProvider) {
+			this.evaluationContextProvider = evaluationContextProvider;
+		}
 
 		/*
 		 * (non-Javadoc)
@@ -115,9 +122,11 @@ public class ElasticsearchRepositoryFactory extends RepositoryFactorySupport {
 
 			if (namedQueries.hasQuery(namedQueryName)) {
 				String namedQuery = namedQueries.getQuery(namedQueryName);
-				return new ElasticsearchStringQuery(queryMethod, elasticsearchOperations, namedQuery);
+				return new ElasticsearchStringQuery(queryMethod, elasticsearchOperations, namedQuery,
+						evaluationContextProvider);
 			} else if (queryMethod.hasAnnotatedQuery()) {
-				return new ElasticsearchStringQuery(queryMethod, elasticsearchOperations, queryMethod.getAnnotatedQuery());
+				return new ElasticsearchStringQuery(queryMethod, elasticsearchOperations, queryMethod.getAnnotatedQuery(),
+						evaluationContextProvider);
 			}
 			return new ElasticsearchPartQuery(queryMethod, elasticsearchOperations);
 		}

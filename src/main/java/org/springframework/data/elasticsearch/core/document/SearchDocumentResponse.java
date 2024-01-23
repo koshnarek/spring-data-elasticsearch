@@ -1,5 +1,5 @@
 /*
- * Copyright 2019-2023 the original author or authors.
+ * Copyright 2019-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,6 +20,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.function.Function;
 
 import org.springframework.data.elasticsearch.core.AggregationsContainer;
+import org.springframework.data.elasticsearch.core.SearchShardStatistics;
 import org.springframework.data.elasticsearch.core.suggest.response.Suggest;
 import org.springframework.lang.Nullable;
 
@@ -27,6 +28,7 @@ import org.springframework.lang.Nullable;
  * This represents the complete search response from Elasticsearch, including the returned documents.
  *
  * @author Peter-Josef Meisch
+ * @author Haibo Liu
  * @since 4.0
  */
 public class SearchDocumentResponse {
@@ -40,10 +42,12 @@ public class SearchDocumentResponse {
 	@Nullable private final Suggest suggest;
 
 	@Nullable String pointInTimeId;
+	@Nullable private final SearchShardStatistics searchShardStatistics;
 
 	public SearchDocumentResponse(long totalHits, String totalHitsRelation, float maxScore, @Nullable String scrollId,
 			@Nullable String pointInTimeId, List<SearchDocument> searchDocuments,
-			@Nullable AggregationsContainer<?> aggregationsContainer, @Nullable Suggest suggest) {
+			@Nullable AggregationsContainer<?> aggregationsContainer, @Nullable Suggest suggest,
+			@Nullable SearchShardStatistics searchShardStatistics) {
 		this.totalHits = totalHits;
 		this.totalHitsRelation = totalHitsRelation;
 		this.maxScore = maxScore;
@@ -52,6 +56,7 @@ public class SearchDocumentResponse {
 		this.searchDocuments = searchDocuments;
 		this.aggregations = aggregationsContainer;
 		this.suggest = suggest;
+		this.searchShardStatistics = searchShardStatistics;
 	}
 
 	public long getTotalHits() {
@@ -91,6 +96,11 @@ public class SearchDocumentResponse {
 	@Nullable
 	public String getPointInTimeId() {
 		return pointInTimeId;
+	}
+
+	@Nullable
+	public SearchShardStatistics getSearchShardStatistics() {
+		return searchShardStatistics;
 	}
 
 	/**

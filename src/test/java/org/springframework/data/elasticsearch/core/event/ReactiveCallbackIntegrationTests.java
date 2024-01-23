@@ -1,5 +1,5 @@
 /*
- * Copyright 2020-2023 the original author or authors.
+ * Copyright 2020-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,6 +16,7 @@
 package org.springframework.data.elasticsearch.core.event;
 
 import static org.assertj.core.api.Assertions.*;
+import static org.springframework.data.elasticsearch.core.IndexOperationsAdapter.*;
 
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
@@ -29,7 +30,6 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.elasticsearch.annotations.Document;
 import org.springframework.data.elasticsearch.core.ReactiveElasticsearchOperations;
-import org.springframework.data.elasticsearch.core.ReactiveIndexOperations;
 import org.springframework.data.elasticsearch.core.mapping.IndexCoordinates;
 import org.springframework.data.elasticsearch.junit.jupiter.SpringIntegrationTest;
 import org.springframework.data.elasticsearch.utils.IndexNameProvider;
@@ -76,14 +76,13 @@ public abstract class ReactiveCallbackIntegrationTests {
 	@BeforeEach
 	void setUp() {
 		indexNameProvider.increment();
-		ReactiveIndexOperations indexOps = operations.indexOps(SampleEntity.class);
-		indexOps.createWithMapping().block();
+		blocking(operations.indexOps(SampleEntity.class)).createWithMapping();
 	}
 
 	@Test
 	@Order(java.lang.Integer.MAX_VALUE)
 	void cleanup() {
-		operations.indexOps(IndexCoordinates.of(indexNameProvider.getPrefix() + "*")).delete().block();
+		blocking(operations.indexOps(IndexCoordinates.of(indexNameProvider.getPrefix() + '*'))).delete();
 	}
 
 	@Test // DATES-68

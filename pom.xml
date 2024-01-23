@@ -5,12 +5,12 @@
 
 	<groupId>org.springframework.data</groupId>
 	<artifactId>spring-data-elasticsearch</artifactId>
-	<version>5.2.0-SNAPSHOT</version>
+	<version>5.3.0-SNAPSHOT</version>
 
 	<parent>
 		<groupId>org.springframework.data.build</groupId>
 		<artifactId>spring-data-parent</artifactId>
-		<version>3.2.0-SNAPSHOT</version>
+		<version>3.3.0-SNAPSHOT</version>
 	</parent>
 
 	<name>Spring Data Elasticsearch</name>
@@ -18,17 +18,17 @@
 	<url>https://github.com/spring-projects/spring-data-elasticsearch</url>
 
 	<properties>
-		<springdata.commons>3.2.0-SNAPSHOT</springdata.commons>
+		<springdata.commons>3.3.0-SNAPSHOT</springdata.commons>
 
 		<!-- version of the ElasticsearchClient	-->
-		<elasticsearch-java>8.9.0</elasticsearch-java>
+		<elasticsearch-java>8.11.4</elasticsearch-java>
 
 		<blockhound-junit>1.0.8.RELEASE</blockhound-junit>
 		<hoverfly>0.14.4</hoverfly>
 		<log4j>2.18.0</log4j>
 		<jsonassert>1.5.1</jsonassert>
 		<testcontainers>1.18.0</testcontainers>
-		<wiremock>2.35.0</wiremock>
+		<wiremock>2.35.1</wiremock>
 
 		<java-module-name>spring.data.elasticsearch</java-module-name>
 
@@ -166,7 +166,6 @@
 		<dependency>
 			<groupId>jakarta.enterprise</groupId>
 			<artifactId>jakarta.enterprise.cdi-api</artifactId>
-			<version>3.0.1</version>
 			<scope>provided</scope>
 			<optional>true</optional>
 		</dependency>
@@ -181,23 +180,6 @@
 		<dependency>
 			<groupId>org.apache.openwebbeans</groupId>
 			<artifactId>openwebbeans-se</artifactId>
-			<classifier>jakarta</classifier>
-			<version>${webbeans}</version>
-			<scope>test</scope>
-		</dependency>
-
-		<dependency>
-			<groupId>org.apache.openwebbeans</groupId>
-			<artifactId>openwebbeans-spi</artifactId>
-			<classifier>jakarta</classifier>
-			<version>${webbeans}</version>
-			<scope>test</scope>
-		</dependency>
-
-		<dependency>
-			<groupId>org.apache.openwebbeans</groupId>
-			<artifactId>openwebbeans-impl</artifactId>
-			<classifier>jakarta</classifier>
 			<version>${webbeans}</version>
 			<scope>test</scope>
 		</dependency>
@@ -342,6 +324,13 @@
 			<scope>test</scope>
 		</dependency>
 
+		<dependency>
+			<groupId>com.tngtech.archunit</groupId>
+			<artifactId>archunit-junit5</artifactId>
+			<version>${archunit}</version>
+			<scope>test</scope>
+		</dependency>
+
 	</dependencies>
 
 	<build>
@@ -410,8 +399,17 @@
 				<artifactId>maven-assembly-plugin</artifactId>
 			</plugin>
 			<plugin>
-				<groupId>org.asciidoctor</groupId>
-				<artifactId>asciidoctor-maven-plugin</artifactId>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-compiler-plugin</artifactId>
+				<configuration>
+					<annotationProcessorPaths>
+						<path>
+							<groupId>org.apache.logging.log4j</groupId>
+							<artifactId>log4j-core</artifactId>
+							<version>${log4j}</version>
+						</path>
+					</annotationProcessorPaths>
+				</configuration>
 			</plugin>
 		</plugins>
 	</build>
@@ -459,6 +457,30 @@
 						<configuration>
 							<argLine>-XX:+AllowRedefinitionToAddDeleteMethods</argLine>
 						</configuration>
+					</plugin>
+				</plugins>
+			</build>
+		</profile>
+
+		<profile>
+			<id>antora-process-resources</id>
+			<build>
+				<resources>
+					<resource>
+						<directory>src/main/antora/resources/antora-resources</directory>
+						<filtering>true</filtering>
+					</resource>
+				</resources>
+			</build>
+		</profile>
+
+		<profile>
+			<id>antora</id>
+			<build>
+				<plugins>
+					<plugin>
+						<groupId>io.spring.maven.antora</groupId>
+						<artifactId>antora-maven-plugin</artifactId>
 					</plugin>
 				</plugins>
 			</build>

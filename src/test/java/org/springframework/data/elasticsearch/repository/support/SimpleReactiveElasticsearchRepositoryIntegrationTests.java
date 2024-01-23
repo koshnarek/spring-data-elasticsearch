@@ -1,5 +1,5 @@
 /*
- * Copyright 2019-2023 the original author or authors.
+ * Copyright 2019-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,6 +16,8 @@
 package org.springframework.data.elasticsearch.repository.support;
 
 import static org.assertj.core.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.*;
+import static org.springframework.data.elasticsearch.core.IndexOperationsAdapter.*;
 import static org.springframework.data.elasticsearch.core.query.Query.*;
 import static org.springframework.data.elasticsearch.utils.IdGenerator.*;
 
@@ -53,9 +55,12 @@ import org.springframework.data.elasticsearch.annotations.Query;
 import org.springframework.data.elasticsearch.annotations.SourceFilters;
 import org.springframework.data.elasticsearch.core.ReactiveElasticsearchOperations;
 import org.springframework.data.elasticsearch.core.SearchHit;
+import org.springframework.data.elasticsearch.core.convert.ConversionException;
 import org.springframework.data.elasticsearch.core.mapping.IndexCoordinates;
 import org.springframework.data.elasticsearch.junit.jupiter.SpringIntegrationTest;
+import org.springframework.data.elasticsearch.repositories.custommethod.QueryParameter;
 import org.springframework.data.elasticsearch.utils.IndexNameProvider;
+import org.springframework.data.repository.query.Param;
 import org.springframework.data.repository.reactive.ReactiveCrudRepository;
 import org.springframework.lang.Nullable;
 
@@ -63,6 +68,7 @@ import org.springframework.lang.Nullable;
  * @author Christoph Strobl
  * @author Peter-Josef Meisch
  * @author Jens Schauder
+ * @author Haibo Liu
  */
 @SpringIntegrationTest
 abstract class SimpleReactiveElasticsearchRepositoryIntegrationTests {
@@ -75,13 +81,13 @@ abstract class SimpleReactiveElasticsearchRepositoryIntegrationTests {
 	@BeforeEach
 	void before() {
 		indexNameProvider.increment();
-		operations.indexOps(SampleEntity.class).createWithMapping().block();
+		blocking(operations.indexOps(SampleEntity.class)).createWithMapping();
 	}
 
 	@Test
 	@org.junit.jupiter.api.Order(Integer.MAX_VALUE)
 	public void cleanup() {
-		operations.indexOps(IndexCoordinates.of(indexNameProvider.getPrefix() + "*")).delete().block();
+		blocking(operations.indexOps(IndexCoordinates.of(indexNameProvider.getPrefix() + '*'))).delete();
 	}
 
 	@Test // DATAES-519
@@ -114,7 +120,7 @@ abstract class SimpleReactiveElasticsearchRepositoryIntegrationTests {
 	@Test // DATAES-519, DATAES-767, DATAES-822
 	void findByIdShouldErrorIfIndexDoesNotExist() {
 
-		operations.indexOps(SampleEntity.class).delete().block();
+		blocking(operations.indexOps(SampleEntity.class)).delete();
 		repository.findById("id-two") //
 				.as(StepVerifier::create) //
 				.expectError(NoSuchIndexException.class) //
@@ -127,7 +133,7 @@ abstract class SimpleReactiveElasticsearchRepositoryIntegrationTests {
 		bulkIndex(new SampleEntity("id-one"), //
 				new SampleEntity("id-two"), //
 				new SampleEntity("id-three")) //
-						.block();
+				.block();
 
 		repository.findById("id-two").as(StepVerifier::create)//
 				.consumeNextWith(it -> assertThat(it.getId()).isEqualTo("id-two")) //
@@ -140,7 +146,7 @@ abstract class SimpleReactiveElasticsearchRepositoryIntegrationTests {
 		bulkIndex(new SampleEntity("id-one"), //
 				new SampleEntity("id-two"), //
 				new SampleEntity("id-three")) //
-						.block();
+				.block();
 
 		repository.findById("does-not-exist").as(StepVerifier::create) //
 				.verifyComplete();
@@ -153,7 +159,7 @@ abstract class SimpleReactiveElasticsearchRepositoryIntegrationTests {
 		bulkIndex(IntStream.range(1, count + 1) //
 				.mapToObj(it -> new SampleEntity(String.valueOf(it))) //
 				.toArray(SampleEntity[]::new)) //
-						.block();
+				.block();
 
 		repository.findAll() //
 				.as(StepVerifier::create) //
@@ -196,7 +202,7 @@ abstract class SimpleReactiveElasticsearchRepositoryIntegrationTests {
 		bulkIndex(new SampleEntity("id-one"), //
 				new SampleEntity("id-two"), //
 				new SampleEntity("id-three")) //
-						.block();
+				.block();
 
 		repository.findAllById(Arrays.asList("can't", "touch", "this")) //
 				.as(StepVerifier::create)//
@@ -209,7 +215,7 @@ abstract class SimpleReactiveElasticsearchRepositoryIntegrationTests {
 		bulkIndex(new SampleEntity("id-one", "message"), //
 				new SampleEntity("id-two", "message"), //
 				new SampleEntity("id-three", "message")) //
-						.block();
+				.block();
 
 		repository.queryAllByMessage("message") //
 				.as(StepVerifier::create) //
@@ -224,9 +230,170 @@ abstract class SimpleReactiveElasticsearchRepositoryIntegrationTests {
 		bulkIndex(new SampleEntity("id-one", "message"), //
 				new SampleEntity("id-two", "message"), //
 				new SampleEntity("id-three", "message")) //
-						.block();
+				.block();
 
 		repository.queryByMessageWithString("message") //
+				.as(StepVerifier::create) //
+				.expectNextMatches(searchHit -> SearchHit.class.isAssignableFrom(searchHit.getClass()))//
+				.expectNextCount(2) //
+				.verifyComplete();
+	}
+
+	@Test
+	void shouldReturnSearchHitsForStringQuerySpEL() {
+		bulkIndex(new SampleEntity("id-one", "message"), //
+				new SampleEntity("id-two", "message"), //
+				new SampleEntity("id-three", "message")) //
+				.block();
+
+		repository.queryByStringSpEL("message")
+				.as(StepVerifier::create) //
+				.expectNextMatches(searchHit -> SearchHit.class.isAssignableFrom(searchHit.getClass()))//
+				.expectNextCount(2) //
+				.verifyComplete();
+	}
+
+	@Test
+	void shouldRaiseExceptionForNullStringQuerySpEL() {
+		bulkIndex(new SampleEntity("id-one", "message"), //
+				new SampleEntity("id-two", "message"), //
+				new SampleEntity("id-three", "message")) //
+				.block();
+
+		ConversionException thrown = assertThrows(ConversionException.class, () -> repository.queryByStringSpEL(null));
+
+		assertThat(thrown.getMessage())
+				.isEqualTo("Parameter value can't be null for SpEL expression '#message' in method 'queryByStringSpEL'" +
+						" when querying elasticsearch");
+	}
+
+	@Test
+	void shouldReturnSearchHitsForParameterPropertyQuerySpEL() {
+		bulkIndex(new SampleEntity("id-one", "message"), //
+				new SampleEntity("id-two", "message"), //
+				new SampleEntity("id-three", "message")) //
+				.block();
+
+		QueryParameter param = new QueryParameter("message");
+
+		repository.queryByParameterPropertySpEL(param)
+				.as(StepVerifier::create) //
+				.expectNextMatches(searchHit -> SearchHit.class.isAssignableFrom(searchHit.getClass()))//
+				.expectNextCount(2) //
+				.verifyComplete();
+	}
+
+	@Test
+	void shouldReturnSearchHitsForBeanQuerySpEL() {
+		bulkIndex(new SampleEntity("id-one", "message"), //
+				new SampleEntity("id-two", "message"), //
+				new SampleEntity("id-three", "message")) //
+				.block();
+
+		repository.queryByBeanPropertySpEL()
+				.as(StepVerifier::create) //
+				.expectNextMatches(searchHit -> SearchHit.class.isAssignableFrom(searchHit.getClass()))//
+				.expectNextCount(2) //
+				.verifyComplete();
+	}
+
+	@Test
+	void shouldReturnSearchHitsForCollectionQuerySpEL() {
+		bulkIndex(new SampleEntity("id-one", "message"), //
+				new SampleEntity("id-two", "message"), //
+				new SampleEntity("id-three", "message")) //
+				.block();
+
+		repository.queryByCollectionSpEL(List.of("message"))
+				.as(StepVerifier::create) //
+				.expectNextMatches(searchHit -> SearchHit.class.isAssignableFrom(searchHit.getClass()))//
+				.expectNextCount(2) //
+				.verifyComplete();
+	}
+
+	@Test
+	void shouldRaiseExceptionForNullCollectionQuerySpEL() {
+		bulkIndex(new SampleEntity("id-one", "message"), //
+				new SampleEntity("id-two", "message"), //
+				new SampleEntity("id-three", "message")) //
+				.block();
+
+		ConversionException thrown = assertThrows(ConversionException.class, () -> repository.queryByCollectionSpEL(null));
+
+		assertThat(thrown.getMessage())
+				.isEqualTo("Parameter value can't be null for SpEL expression '#messages' in method 'queryByCollectionSpEL'" +
+						" when querying elasticsearch");
+	}
+
+	@Test
+	void shouldNotReturnSearchHitsForEmptyCollectionQuerySpEL() {
+		bulkIndex(new SampleEntity("id-one", "message"), //
+				new SampleEntity("id-two", "message"), //
+				new SampleEntity("id-three", "message")) //
+				.block();
+
+		repository.queryByCollectionSpEL(List.of())
+				.as(StepVerifier::create) //
+				.expectNextCount(0) //
+				.verifyComplete();
+	}
+
+	@Test
+	void shouldNotReturnSearchHitsForCollectionQueryWithOnlyNullValuesSpEL() {
+		bulkIndex(new SampleEntity("id-one", "message"), //
+				new SampleEntity("id-two", "message"), //
+				new SampleEntity("id-three", "message")) //
+				.block();
+
+		List<String> params = new ArrayList<>();
+		params.add(null);
+
+		repository.queryByCollectionSpEL(params)
+				.as(StepVerifier::create) //
+				.expectNextCount(0) //
+				.verifyComplete();
+	}
+
+	@Test
+	void shouldIgnoreNullValuesInCollectionQuerySpEL() {
+		bulkIndex(new SampleEntity("id-one", "message"), //
+				new SampleEntity("id-two", "message"), //
+				new SampleEntity("id-three", "message")) //
+				.block();
+
+		repository.queryByCollectionSpEL(Arrays.asList("message", null))
+				.as(StepVerifier::create) //
+				.expectNextMatches(searchHit -> SearchHit.class.isAssignableFrom(searchHit.getClass()))//
+				.expectNextCount(2) //
+				.verifyComplete();
+	}
+
+	@Test
+	void shouldReturnSearchHitsForParameterPropertyCollectionQuerySpEL() {
+		bulkIndex(new SampleEntity("id-one", "message"), //
+				new SampleEntity("id-two", "message"), //
+				new SampleEntity("id-three", "message")) //
+				.block();
+
+		QueryParameter param = new QueryParameter("message");
+
+		repository.queryByParameterPropertyCollectionSpEL(List.of(param))
+				.as(StepVerifier::create) //
+				.expectNextMatches(searchHit -> SearchHit.class.isAssignableFrom(searchHit.getClass()))//
+				.expectNextCount(2) //
+				.verifyComplete();
+	}
+
+	@Test
+	void shouldReturnSearchHitsForParameterPropertyCollectionQuerySpELWithParamAnnotation() {
+		bulkIndex(new SampleEntity("id-one", "message"), //
+				new SampleEntity("id-two", "message"), //
+				new SampleEntity("id-three", "message")) //
+				.block();
+
+		QueryParameter param = new QueryParameter("message");
+
+		repository.queryByParameterPropertyCollectionSpELWithParamAnnotation(List.of(param))
 				.as(StepVerifier::create) //
 				.expectNextMatches(searchHit -> SearchHit.class.isAssignableFrom(searchHit.getClass()))//
 				.expectNextCount(2) //
@@ -239,7 +406,7 @@ abstract class SimpleReactiveElasticsearchRepositoryIntegrationTests {
 		bulkIndex(new SampleEntity("id-one", "message"), //
 				new SampleEntity("id-two", "message"), //
 				new SampleEntity("id-three", "message")) //
-						.block();
+				.block();
 
 		repository.queryAllByMessage("message") //
 				.as(StepVerifier::create) //
@@ -257,7 +424,7 @@ abstract class SimpleReactiveElasticsearchRepositoryIntegrationTests {
 		bulkIndex(new SampleEntity("id-one", "message"), //
 				new SampleEntity("id-two", "message"), //
 				new SampleEntity("id-three", "message")) //
-						.block();
+				.block();
 
 		repository.queryByMessageWithString("message") //
 				.as(StepVerifier::create) //
@@ -272,7 +439,7 @@ abstract class SimpleReactiveElasticsearchRepositoryIntegrationTests {
 	@Test // DATAES-519, DATAES-767, DATAES-822
 	void countShouldErrorWhenIndexDoesNotExist() {
 
-		operations.indexOps(SampleEntity.class).delete().block();
+		blocking(operations.indexOps(SampleEntity.class)).delete();
 		repository.count() //
 				.as(StepVerifier::create) //
 				.expectError(NoSuchIndexException.class) //
@@ -284,7 +451,7 @@ abstract class SimpleReactiveElasticsearchRepositoryIntegrationTests {
 
 		bulkIndex(new SampleEntity("id-one"), //
 				new SampleEntity("id-two")) //
-						.block();
+				.block();
 
 		repository.count().as(StepVerifier::create).expectNext(2L).verifyComplete();
 	}
@@ -295,7 +462,7 @@ abstract class SimpleReactiveElasticsearchRepositoryIntegrationTests {
 		bulkIndex(new SampleEntity("id-one", "message"), //
 				new SampleEntity("id-two", "test message"), //
 				new SampleEntity("id-three", "test test")) //
-						.block();
+				.block();
 
 		repository.existsById("id-two") //
 				.as(StepVerifier::create) //
@@ -309,7 +476,7 @@ abstract class SimpleReactiveElasticsearchRepositoryIntegrationTests {
 		bulkIndex(new SampleEntity("id-one", "message"), //
 				new SampleEntity("id-two", "test message"), //
 				new SampleEntity("id-three", "test test")) //
-						.block();
+				.block();
 
 		repository.existsById("wrecking ball") //
 				.as(StepVerifier::create) //
@@ -350,7 +517,7 @@ abstract class SimpleReactiveElasticsearchRepositoryIntegrationTests {
 		bulkIndex(new SampleEntity("id-one", "message"), //
 				new SampleEntity("id-two", "test message"), //
 				new SampleEntity("id-three", "test test")) //
-						.block();
+				.block();
 
 		repository.existsAllByMessage("message") //
 				.as(StepVerifier::create) //
@@ -364,7 +531,7 @@ abstract class SimpleReactiveElasticsearchRepositoryIntegrationTests {
 		bulkIndex(new SampleEntity("id-one", "message"), //
 				new SampleEntity("id-two", "test message"), //
 				new SampleEntity("id-three", "test test")) //
-						.block();
+				.block();
 
 		repository.existsAllByMessage("these days") //
 				.as(StepVerifier::create) //
@@ -377,7 +544,7 @@ abstract class SimpleReactiveElasticsearchRepositoryIntegrationTests {
 
 		bulkIndex(new SampleEntity("id-one"), //
 				new SampleEntity("id-two")) //
-						.block();
+				.block();
 
 		repository.deleteById("does-not-exist").as(StepVerifier::create).verifyComplete();
 	}
@@ -448,7 +615,7 @@ abstract class SimpleReactiveElasticsearchRepositoryIntegrationTests {
 		bulkIndex(new SampleEntity("id-one"), //
 				new SampleEntity("id-two"), //
 				new SampleEntity("id-three")) //
-						.block();
+				.block();
 
 		repository.deleteAll().as(StepVerifier::create).verifyComplete();
 
@@ -464,7 +631,7 @@ abstract class SimpleReactiveElasticsearchRepositoryIntegrationTests {
 		bulkIndex(new SampleEntity("id-one", "message"), //
 				new SampleEntity("id-two", "test message"), //
 				new SampleEntity("id-three", "test test")) //
-						.block();
+				.block();
 
 		repository.findAllByMessageLike("test") //
 				.as(StepVerifier::create) //
@@ -478,7 +645,7 @@ abstract class SimpleReactiveElasticsearchRepositoryIntegrationTests {
 		bulkIndex(new SampleEntity("id-one", "message"), //
 				new SampleEntity("id-two", "test message"), //
 				new SampleEntity("id-three", "test test")) //
-						.block();
+				.block();
 
 		repository.findAllByMessage(Mono.just("test")) //
 				.as(StepVerifier::create) //
@@ -492,7 +659,7 @@ abstract class SimpleReactiveElasticsearchRepositoryIntegrationTests {
 		bulkIndex(new SampleEntity("id-one", "test", 3), //
 				new SampleEntity("id-two", "test test", 1), //
 				new SampleEntity("id-three", "test test", 2)) //
-						.block();
+				.block();
 
 		repository.findAllByMessageLikeOrderByRate("test") //
 				.as(StepVerifier::create) //
@@ -508,7 +675,7 @@ abstract class SimpleReactiveElasticsearchRepositoryIntegrationTests {
 		bulkIndex(new SampleEntity("id-one", "test", 3), //
 				new SampleEntity("id-two", "test test", 1), //
 				new SampleEntity("id-three", "test test", 2)) //
-						.block();
+				.block();
 
 		repository.findAllByMessage("test", Sort.by(Order.asc("rate"))) //
 				.as(StepVerifier::create) //
@@ -524,7 +691,7 @@ abstract class SimpleReactiveElasticsearchRepositoryIntegrationTests {
 		bulkIndex(new SampleEntity("id-one", "test", 3), //
 				new SampleEntity("id-two", "test test", 1), //
 				new SampleEntity("id-three", "test test", 2)) //
-						.block();
+				.block();
 
 		repository.findAllByMessage("test", PageRequest.of(0, 2, Sort.by(Order.asc("rate")))) //
 				.as(StepVerifier::create) //
@@ -539,7 +706,7 @@ abstract class SimpleReactiveElasticsearchRepositoryIntegrationTests {
 		bulkIndex(new SampleEntity("id-one", "message"), //
 				new SampleEntity("id-two", "test message"), //
 				new SampleEntity("id-three", "test test")) //
-						.block();
+				.block();
 
 		repository.findFirstByMessageLike("test") //
 				.as(StepVerifier::create) //
@@ -589,7 +756,7 @@ abstract class SimpleReactiveElasticsearchRepositoryIntegrationTests {
 		bulkIndex(new SampleEntity("id-one", "message"), //
 				new SampleEntity("id-two", "test message"), //
 				new SampleEntity("id-three", "test test")) //
-						.block();
+				.block();
 
 		repository.deleteAllByMessage("message") //
 				.as(StepVerifier::create) //
@@ -606,7 +773,7 @@ abstract class SimpleReactiveElasticsearchRepositoryIntegrationTests {
 		bulkIndex(new SampleEntity("id-one", "message1"), //
 				new SampleEntity("id-two", "message2"), //
 				new SampleEntity("id-three", "message3")) //
-						.block();
+				.block();
 
 		repository.findAllViaAnnotatedQueryByMessageIn(List.of("message1", "message3")) //
 				.as(StepVerifier::create) //
@@ -621,7 +788,7 @@ abstract class SimpleReactiveElasticsearchRepositoryIntegrationTests {
 		bulkIndex(new SampleEntity("id-one", "test", 3), //
 				new SampleEntity("id-two", "test test", 1), //
 				new SampleEntity("id-three", "test test", 2)) //
-						.block();
+				.block();
 
 		repository.findAllViaAnnotatedQueryByRatesIn(List.of(2, 3)) //
 				.as(StepVerifier::create) //
@@ -638,7 +805,7 @@ abstract class SimpleReactiveElasticsearchRepositoryIntegrationTests {
 				new SampleEntity("id-three", "message3", 3), //
 				new SampleEntity("id-four", "message4", 4), //
 				new SampleEntity("id-five", "message5", 5)) //
-						.block();
+				.block();
 
 		repository.findAllViaAnnotatedQueryByMessageInAndRatesIn(List.of("message5", "message3"), List.of(2, 3)) //
 				.as(StepVerifier::create) //
@@ -785,6 +952,105 @@ abstract class SimpleReactiveElasticsearchRepositoryIntegrationTests {
 
 		@Query("{ \"bool\" : { \"must\" : { \"term\" : { \"message\" : \"?0\" } } } }")
 		Flux<SampleEntity> findAllViaAnnotatedQueryByMessageLikePaged(String message, Pageable pageable);
+
+		/**
+		 * The parameter is annotated with {@link Nullable} deliberately to test that our elasticsearch SpEL converters will
+		 * not accept a null parameter as query value.
+		 */
+		@Query("""
+				{
+				  "bool":{
+				    "must":[
+				      {
+				        "term":{
+				          "message": "#{#message}"
+				        }
+				      }
+				    ]
+				  }
+				}
+				""")
+		Flux<SearchHit<SampleEntity>> queryByStringSpEL(@Nullable String message);
+
+		@Query("""
+				{
+				  "bool":{
+				    "must":[
+				      {
+				        "term":{
+				          "message": "#{#parameter.value}"
+				        }
+				      }
+				    ]
+				  }
+				}
+				""")
+		Flux<SearchHit<SampleEntity>> queryByParameterPropertySpEL(QueryParameter parameter);
+
+		@Query("""
+				{
+				  "bool":{
+				    "must":[
+				      {
+				        "term":{
+				          "message": "#{@queryParameter.value}"
+				        }
+				      }
+				    ]
+				  }
+				}
+				""")
+		Flux<SearchHit<SampleEntity>> queryByBeanPropertySpEL();
+
+		/**
+		 * The parameter is annotated with {@link Nullable} deliberately to test that our elasticsearch SpEL converters will
+		 * not accept a null parameter as query value.
+		 */
+		@Query("""
+				{
+				  "bool":{
+				    "must":[
+				      {
+				        "terms":{
+				          "message": #{#messages}
+				        }
+				      }
+				    ]
+				  }
+				}
+				""")
+		Flux<SearchHit<SampleEntity>> queryByCollectionSpEL(@Nullable Collection<String> messages);
+
+		@Query("""
+				{
+				  "bool":{
+				    "must":[
+				      {
+				        "terms":{
+				          "message": #{#parameters.![value]}
+				        }
+				      }
+				    ]
+				  }
+				}
+				""")
+		Flux<SearchHit<SampleEntity>> queryByParameterPropertyCollectionSpEL(Collection<QueryParameter> parameters);
+
+		@Query("""
+				{
+				  "bool":{
+				    "must":[
+				      {
+				        "terms":{
+				          "message": #{#e.![value]}
+				        }
+				      }
+				    ]
+				  }
+				}
+				""")
+		Flux<SearchHit<SampleEntity>> queryByParameterPropertyCollectionSpELWithParamAnnotation(
+				@Param("e") Collection<QueryParameter> parameters);
 
 		Mono<SampleEntity> findFirstByMessageLike(String message);
 

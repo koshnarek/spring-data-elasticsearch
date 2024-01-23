@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 the original author or authors.
+ * Copyright 2018-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -77,7 +77,17 @@ public interface ReactiveElasticsearchOperations
 	 */
 	ReactiveClusterOperations cluster();
 
-	// region routing
+	/**
+	 * gets the routing for an entity.
+	 *
+	 * @param entity the entity
+	 * @return the routing, may be null if not set.
+	 * @since 5.2
+	 */
+	@Nullable
+	String getEntityRouting(Object entity);
+
+	// region customizations
 	/**
 	 * Returns a copy of this instance with the same configuration, but that uses a different {@link RoutingResolver} to
 	 * obtain routing information.
@@ -86,5 +96,14 @@ public interface ReactiveElasticsearchOperations
 	 * @return DocumentOperations instance
 	 */
 	ReactiveElasticsearchOperations withRouting(RoutingResolver routingResolver);
+
+	/**
+	 * Returns a copy of this instance with the same configuration, but that uses a different {@link RefreshPolicy}.
+	 *
+	 * @param refreshPolicy the {@link RefreshPolicy} value.
+	 * @return {@link ReactiveElasticsearchOperations} instance.
+	 * @since 5.2
+	 */
+	ReactiveElasticsearchOperations withRefreshPolicy(@Nullable RefreshPolicy refreshPolicy);
 	// endregion
 }

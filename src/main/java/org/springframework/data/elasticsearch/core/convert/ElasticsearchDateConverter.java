@@ -1,5 +1,5 @@
 /*
- * Copyright 2019-2023 the original author or authors.
+ * Copyright 2019-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -323,9 +323,9 @@ final public class ElasticsearchDateConverter {
 			try {
 				return dateTimeFormatter.format(accessor);
 			} catch (Exception e) {
-				if (accessor instanceof Instant) {
+				if (accessor instanceof Instant instant) {
 					// as alternatives try to format a ZonedDateTime or LocalDateTime
-					return dateTimeFormatter.format(ZonedDateTime.ofInstant((Instant) accessor, ZoneId.of("UTC")));
+					return dateTimeFormatter.format(ZonedDateTime.ofInstant(instant, ZoneId.of("UTC")));
 				} else {
 					throw e;
 				}

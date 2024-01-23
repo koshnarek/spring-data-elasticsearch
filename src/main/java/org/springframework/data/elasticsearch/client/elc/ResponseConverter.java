@@ -1,5 +1,5 @@
 /*
- * Copyright 2021-2023 the original author or authors.
+ * Copyright 2021-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -121,8 +121,7 @@ class ResponseConverter {
 				.build();
 	}
 
-	private TemplateResponseData clusterGetComponentTemplateData(
-			ComponentTemplateSummary componentTemplateSummary) {
+	private TemplateResponseData clusterGetComponentTemplateData(ComponentTemplateSummary componentTemplateSummary) {
 
 		var mapping = typeMapping(componentTemplateSummary.mappings());
 		var settings = new Settings();
@@ -326,7 +325,7 @@ class ResponseConverter {
 	}
 
 	private TemplateResponseData indexGetComponentTemplateData(IndexTemplateSummary indexTemplateSummary,
-																														 List<String> composedOf) {
+			List<String> composedOf) {
 		var mapping = typeMapping(indexTemplateSummary.mappings());
 
 		Function<IndexSettings, Settings> indexSettingsToSettings = indexSettings -> {
@@ -541,7 +540,7 @@ class ResponseConverter {
 	}
 
 	@Nullable
-	private static ElasticsearchErrorCause toErrorCause(@Nullable ErrorCause errorCause) {
+	static ElasticsearchErrorCause toErrorCause(@Nullable ErrorCause errorCause) {
 
 		if (errorCause != null) {
 			return new ElasticsearchErrorCause( //

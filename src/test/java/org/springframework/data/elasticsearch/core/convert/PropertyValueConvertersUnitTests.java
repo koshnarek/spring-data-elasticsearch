@@ -1,5 +1,5 @@
 /*
- * Copyright 2021-2023 the original author or authors.
+ * Copyright 2021-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -63,13 +63,14 @@ public class PropertyValueConvertersUnitTests {
 
 		converters.add(new DatePropertyValueConverter(persistentProperty,
 				Collections.singletonList(ElasticsearchDateConverter.of(DateFormat.basic_date))));
+		Class<?> genericType = Object.class;
 		converters.add(new DateRangePropertyValueConverter(persistentProperty,
-				Collections.singletonList(ElasticsearchDateConverter.of(DateFormat.basic_date))));
-		converters.add(new NumberRangePropertyValueConverter(persistentProperty));
+				genericType, Collections.singletonList(ElasticsearchDateConverter.of(DateFormat.basic_date))));
+		converters.add(new NumberRangePropertyValueConverter(persistentProperty, genericType));
 		converters.add(new TemporalPropertyValueConverter(persistentProperty,
 				Collections.singletonList(ElasticsearchDateConverter.of(DateFormat.basic_date))));
 		converters.add(new TemporalRangePropertyValueConverter(persistentProperty,
-				Collections.singletonList(ElasticsearchDateConverter.of(DateFormat.basic_date))));
+				genericType, Collections.singletonList(ElasticsearchDateConverter.of(DateFormat.basic_date))));
 
 		return converters.stream().map(propertyValueConverter -> arguments(
 				Named.of(propertyValueConverter.getClass().getSimpleName(), propertyValueConverter)));

@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 the original author or authors.
+ * Copyright 2018-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -185,14 +185,6 @@ public class SimpleElasticsearchPersistentPropertyUnitTests {
 		assertThat(seqNoProperty.isWritable()).isFalse();
 	}
 
-	@Test // DATAES-799
-	void seqNoPrimaryTermPropertyShouldNotBeReadable() {
-		SimpleElasticsearchPersistentEntity<?> entity = context.getRequiredPersistentEntity(SeqNoPrimaryTermProperty.class);
-		ElasticsearchPersistentProperty seqNoProperty = entity.getRequiredPersistentProperty("seqNoPrimaryTerm");
-
-		assertThat(seqNoProperty.isReadable()).isFalse();
-	}
-
 	@Test // DATAES-924
 	@DisplayName("should require pattern for custom date format")
 	void shouldRequirePatternForCustomDateFormat() {
@@ -259,12 +251,12 @@ public class SimpleElasticsearchPersistentPropertyUnitTests {
 
 		assertThat(
 				persistentEntity.getRequiredPersistentProperty("fieldWithClassBasedConverter").getPropertyValueConverter())
-						.isInstanceOf(ClassBasedValueConverter.class);
+				.isInstanceOf(ClassBasedValueConverter.class);
 		assertThat(persistentEntity.getRequiredPersistentProperty("fieldWithClassBasedDerivedFromAbstractValueConverter")
 				.getPropertyValueConverter()).isInstanceOf(ClassBasedDerivedFromAbstractValueConverter.class);
 		assertThat(
 				persistentEntity.getRequiredPersistentProperty("fieldWithEnumBasedConverter").getPropertyValueConverter())
-						.isInstanceOf(EnumBasedValueConverter.class);
+				.isInstanceOf(EnumBasedValueConverter.class);
 	}
 
 	// region entities

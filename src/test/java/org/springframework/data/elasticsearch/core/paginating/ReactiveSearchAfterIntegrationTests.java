@@ -1,5 +1,5 @@
 /*
- * Copyright 2021-2023 the original author or authors.
+ * Copyright 2021-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,6 +16,7 @@
 package org.springframework.data.elasticsearch.core.paginating;
 
 import static org.assertj.core.api.Assertions.*;
+import static org.springframework.data.elasticsearch.core.IndexOperationsAdapter.*;
 
 import reactor.core.publisher.Mono;
 
@@ -57,13 +58,13 @@ public abstract class ReactiveSearchAfterIntegrationTests {
 	public void beforeEach() {
 
 		indexNameProvider.increment();
-		operations.indexOps(Entity.class).createWithMapping().block();
+		blocking(operations.indexOps(Entity.class)).createWithMapping();
 	}
 
 	@Test
 	@Order(java.lang.Integer.MAX_VALUE)
 	void cleanup() {
-		operations.indexOps(IndexCoordinates.of(indexNameProvider.getPrefix() + "*")).delete().block();
+		blocking(operations.indexOps(IndexCoordinates.of(indexNameProvider.getPrefix() + '*'))).delete();
 	}
 
 	@Test // #1143

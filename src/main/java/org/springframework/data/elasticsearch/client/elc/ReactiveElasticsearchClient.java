@@ -1,5 +1,5 @@
 /*
- * Copyright 2021-2023 the original author or authors.
+ * Copyright 2021-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -126,6 +126,13 @@ public class ReactiveElasticsearchClient extends ApiClient<ElasticsearchTranspor
 				getDeserializer(tClass));
 
 		return Mono.fromFuture(transport.performRequestAsync(request, endpoint, transportOptions));
+	}
+
+	public Mono<BooleanResponse> exists(ExistsRequest request) {
+
+		Assert.notNull(request, "request must not be null");
+
+		return Mono.fromFuture(transport.performRequestAsync(request, ExistsRequest._ENDPOINT, transportOptions));
 	}
 
 	public <T, P> Mono<UpdateResponse<T>> update(UpdateRequest<T, P> request, Class<T> clazz) {

@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2023 the original author or authors.
+ * Copyright 2013-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,10 +16,10 @@
 package org.springframework.data.elasticsearch.repositories.custommethod;
 
 import static org.assertj.core.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.*;
 import static org.springframework.data.elasticsearch.annotations.FieldType.*;
 import static org.springframework.data.elasticsearch.utils.IdGenerator.*;
 
-import java.lang.Long;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -32,7 +32,6 @@ import java.util.stream.Stream;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.condition.DisabledIf;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.annotation.Version;
@@ -46,13 +45,14 @@ import org.springframework.data.elasticsearch.annotations.Document;
 import org.springframework.data.elasticsearch.annotations.Field;
 import org.springframework.data.elasticsearch.annotations.Highlight;
 import org.springframework.data.elasticsearch.annotations.HighlightField;
+import org.springframework.data.elasticsearch.annotations.HighlightParameters;
 import org.springframework.data.elasticsearch.annotations.Query;
 import org.springframework.data.elasticsearch.annotations.SourceFilters;
-import org.springframework.data.elasticsearch.core.AbstractElasticsearchTemplate;
 import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
 import org.springframework.data.elasticsearch.core.SearchHit;
 import org.springframework.data.elasticsearch.core.SearchHits;
 import org.springframework.data.elasticsearch.core.SearchPage;
+import org.springframework.data.elasticsearch.core.convert.ConversionException;
 import org.springframework.data.elasticsearch.core.geo.GeoBox;
 import org.springframework.data.elasticsearch.core.geo.GeoPoint;
 import org.springframework.data.elasticsearch.core.mapping.IndexCoordinates;
@@ -64,6 +64,7 @@ import org.springframework.data.geo.Box;
 import org.springframework.data.geo.Distance;
 import org.springframework.data.geo.Metrics;
 import org.springframework.data.geo.Point;
+import org.springframework.data.repository.query.Param;
 import org.springframework.lang.Nullable;
 
 /**
@@ -76,6 +77,7 @@ import org.springframework.lang.Nullable;
  * @author Peter-Josef Meisch
  * @author Rasmus Faber-Espensen
  * @author James Mudd
+ * @author Haibo Liu
  */
 @SpringIntegrationTest
 public abstract class CustomMethodRepositoryIntegrationTests {
@@ -1522,6 +1524,135 @@ public abstract class CustomMethodRepositoryIntegrationTests {
 		assertThat(searchHits.getTotalHits()).isEqualTo(20);
 	}
 
+	@Test
+	void shouldReturnSearchHitsForStringQuerySpEL() {
+		List<SampleEntity> entities = createSampleEntities("abc", 20);
+		repository.saveAll(entities);
+
+		// when
+		SearchHits<SampleEntity> searchHits = repository.queryByStringSpEL("abc");
+
+		assertThat(searchHits.getTotalHits()).isEqualTo(20);
+	}
+
+	@Test
+	void shouldRaiseExceptionForNullStringQuerySpEL() {
+		List<SampleEntity> entities = createSampleEntities("abc", 20);
+		repository.saveAll(entities);
+
+		ConversionException thrown = assertThrows(ConversionException.class, () -> repository.queryByStringSpEL(null));
+
+		assertThat(thrown.getMessage())
+				.isEqualTo("Parameter value can't be null for SpEL expression '#type' in method 'queryByStringSpEL'" +
+						" when querying elasticsearch");
+	}
+
+	@Test
+	void shouldReturnSearchHitsForParameterPropertyQuerySpEL() {
+		List<SampleEntity> entities = createSampleEntities("abc", 20);
+		repository.saveAll(entities);
+
+		QueryParameter param = new QueryParameter("abc");
+		// when
+		SearchHits<SampleEntity> searchHits = repository.queryByParameterPropertySpEL(param);
+
+		assertThat(searchHits.getTotalHits()).isEqualTo(20);
+	}
+
+	@Test
+	void shouldReturnSearchHitsForBeanQuerySpEL() {
+		List<SampleEntity> entities = createSampleEntities("abc", 20);
+		repository.saveAll(entities);
+
+		// when
+		SearchHits<SampleEntity> searchHits = repository.queryByBeanPropertySpEL();
+
+		assertThat(searchHits.getTotalHits()).isEqualTo(20);
+	}
+
+	@Test
+	void shouldReturnSearchHitsForCollectionQuerySpEL() {
+		List<SampleEntity> entities = createSampleEntities("abc", 20);
+		repository.saveAll(entities);
+
+		// when
+		SearchHits<SampleEntity> searchHits = repository.queryByCollectionSpEL(List.of("abc"));
+
+		assertThat(searchHits.getTotalHits()).isEqualTo(20);
+	}
+
+	@Test
+	void shouldRaiseExceptionForNullCollectionQuerySpEL() {
+		List<SampleEntity> entities = createSampleEntities("abc", 20);
+		repository.saveAll(entities);
+
+		ConversionException thrown = assertThrows(ConversionException.class, () -> repository.queryByCollectionSpEL(null));
+
+		assertThat(thrown.getMessage())
+				.isEqualTo("Parameter value can't be null for SpEL expression '#types' in method 'queryByCollectionSpEL'" +
+						" when querying elasticsearch");
+	}
+
+	@Test
+	void shouldNotReturnSearchHitsForEmptyCollectionQuerySpEL() {
+		List<SampleEntity> entities = createSampleEntities("abc", 20);
+		repository.saveAll(entities);
+
+		// when
+		SearchHits<SampleEntity> searchHits = repository.queryByCollectionSpEL(List.of());
+
+		assertThat(searchHits.getTotalHits()).isEqualTo(0);
+	}
+
+	@Test
+	void shouldNotReturnSearchHitsForCollectionQueryWithOnlyNullValuesSpEL() {
+		List<SampleEntity> entities = createSampleEntities("abc", 20);
+		repository.saveAll(entities);
+
+		List<String> params = new ArrayList<>();
+		params.add(null);
+		// when
+		SearchHits<SampleEntity> searchHits = repository.queryByCollectionSpEL(params);
+
+		assertThat(searchHits.getTotalHits()).isEqualTo(0);
+	}
+
+	@Test
+	void shouldIgnoreNullValuesInCollectionQuerySpEL() {
+		List<SampleEntity> entities = createSampleEntities("abc", 20);
+		repository.saveAll(entities);
+
+		// when
+		SearchHits<SampleEntity> searchHits = repository.queryByCollectionSpEL(Arrays.asList("abc", null));
+
+		assertThat(searchHits.getTotalHits()).isEqualTo(20);
+	}
+
+	@Test
+	void shouldReturnSearchHitsForParameterPropertyCollectionQuerySpEL() {
+		List<SampleEntity> entities = createSampleEntities("abc", 20);
+		repository.saveAll(entities);
+
+		QueryParameter param = new QueryParameter("abc");
+		// when
+		SearchHits<SampleEntity> searchHits = repository.queryByParameterPropertyCollectionSpEL(List.of(param));
+
+		assertThat(searchHits.getTotalHits()).isEqualTo(20);
+	}
+
+	@Test
+	void shouldReturnSearchHitsForParameterPropertyCollectionQuerySpELWithParamAnnotation() {
+		List<SampleEntity> entities = createSampleEntities("abc", 20);
+		repository.saveAll(entities);
+
+		QueryParameter param = new QueryParameter("abc");
+		// when
+		SearchHits<SampleEntity> searchHits = repository.queryByParameterPropertyCollectionSpELWithParamAnnotation(
+				List.of(param));
+
+		assertThat(searchHits.getTotalHits()).isEqualTo(20);
+	}
+
 	@Test // DATAES-372
 	void shouldReturnHighlightsOnAnnotatedMethod() {
 		List<SampleEntity> entities = createSampleEntities("abc", 2);
@@ -1546,6 +1677,26 @@ public abstract class CustomMethodRepositoryIntegrationTests {
 		assertThat(searchHits.getTotalHits()).isEqualTo(2);
 		SearchHit<SampleEntity> searchHit = searchHits.getSearchHit(0);
 		assertThat(searchHit.getHighlightField("type")).hasSize(1).contains("<em>abc</em>");
+	}
+
+	@Test
+	void shouldReturnDifferentHighlightsOnAnnotatedStringQueryMethod() {
+		List<SampleEntity> entities = createSampleEntities("abc xyz", 2);
+		repository.saveAll(entities);
+
+		// when
+		SearchHits<SampleEntity> highlightAbcHits = repository.queryByStringWithSeparateHighlight("abc", "abc");
+
+		assertThat(highlightAbcHits.getTotalHits()).isEqualTo(2);
+		SearchHit<SampleEntity> highlightAbcHit = highlightAbcHits.getSearchHit(0);
+		assertThat(highlightAbcHit.getHighlightField("type")).hasSize(1).contains("<em>abc</em> xyz");
+
+		// when
+		SearchHits<SampleEntity> highlightXyzHits = repository.queryByStringWithSeparateHighlight("abc", "xyz");
+
+		assertThat(highlightXyzHits.getTotalHits()).isEqualTo(2);
+		SearchHit<SampleEntity> highlightXyzHit = highlightXyzHits.getSearchHit(0);
+		assertThat(highlightXyzHit.getHighlightField("type")).hasSize(1).contains("abc <em>xyz</em>");
 	}
 
 	@Test // DATAES-734
@@ -1919,6 +2070,136 @@ public abstract class CustomMethodRepositoryIntegrationTests {
 		@Query("{\"bool\": {\"must\": [{\"term\": {\"type\": \"?0\"}}]}}")
 		@Highlight(fields = { @HighlightField(name = "type") })
 		SearchHits<SampleEntity> queryByString(String type);
+
+		/**
+		 * The parameter is annotated with {@link Nullable} deliberately to test that our elasticsearch SpEL converters will
+		 * not accept a null parameter as query value.
+		 */
+		@Query("""
+				{
+				  "bool":{
+				    "must":[
+				      {
+				        "term":{
+				          "type": "#{#type}"
+				        }
+				      }
+				    ]
+				  }
+				}
+				""")
+		SearchHits<SampleEntity> queryByStringSpEL(@Nullable String type);
+
+		@Query("""
+				{
+				  "bool":{
+				    "must":[
+				      {
+				        "term":{
+				          "type": "#{#parameter.value}"
+				        }
+				      }
+				    ]
+				  }
+				}
+				""")
+		SearchHits<SampleEntity> queryByParameterPropertySpEL(QueryParameter parameter);
+
+		@Query("""
+				{
+				  "bool":{
+				    "must":[
+				      {
+				        "term":{
+				          "type": "#{@queryParameter.value}"
+				        }
+				      }
+				    ]
+				  }
+				}
+				""")
+		SearchHits<SampleEntity> queryByBeanPropertySpEL();
+
+		/**
+		 * The parameter is annotated with {@link Nullable} deliberately to test that our elasticsearch SpEL converters will
+		 * not accept a null parameter as query value.
+		 */
+		@Query("""
+				{
+				  "bool":{
+				    "must":[
+				      {
+				        "terms":{
+				          "type": #{#types}
+				        }
+				      }
+				    ]
+				  }
+				}
+				""")
+		SearchHits<SampleEntity> queryByCollectionSpEL(@Nullable Collection<String> types);
+
+		@Query("""
+				{
+				  "bool":{
+				    "must":[
+				      {
+				        "terms":{
+				          "type": #{#parameters.![value]}
+				        }
+				      }
+				    ]
+				  }
+				}
+				""")
+		SearchHits<SampleEntity> queryByParameterPropertyCollectionSpEL(Collection<QueryParameter> parameters);
+
+		@Query("""
+				{
+				  "bool":{
+				    "must":[
+				      {
+				        "terms":{
+				          "type": #{#e.![value]}
+				        }
+				      }
+				    ]
+				  }
+				}
+				""")
+		SearchHits<SampleEntity> queryByParameterPropertyCollectionSpELWithParamAnnotation(
+				@Param("e") Collection<QueryParameter> parameters);
+
+		@Query("""
+				{
+				  "bool":{
+				    "must":[
+				      {
+				        "match":{
+				          "type":"?0"
+				        }
+				      }
+				    ]
+				  }
+				}
+				""")
+		@Highlight(
+				fields = { @HighlightField(name = "type") },
+				parameters = @HighlightParameters(
+						highlightQuery = @Query("""
+								{
+								  "bool":{
+								    "must":[
+								      {
+								        "match":{
+								          "type":"?1"
+								        }
+								      }
+								    ]
+								  }
+								}
+								""")))
+		SearchHits<SampleEntity> queryByStringWithSeparateHighlight(String type, String highlight);
 
 		List<SearchHit<SampleEntity>> queryByMessage(String message);
 

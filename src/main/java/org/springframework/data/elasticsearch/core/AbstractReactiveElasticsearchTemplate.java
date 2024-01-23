@@ -1,5 +1,5 @@
 /*
- * Copyright 2021-2023 the original author or authors.
+ * Copyright 2021-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,8 +15,6 @@
  */
 package org.springframework.data.elasticsearch.core;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.Sinks;
@@ -45,7 +43,6 @@ import org.springframework.data.elasticsearch.core.event.ReactiveAfterLoadCallba
 import org.springframework.data.elasticsearch.core.event.ReactiveAfterSaveCallback;
 import org.springframework.data.elasticsearch.core.event.ReactiveBeforeConvertCallback;
 import org.springframework.data.elasticsearch.core.mapping.ElasticsearchPersistentEntity;
-import org.springframework.data.elasticsearch.core.mapping.ElasticsearchPersistentProperty;
 import org.springframework.data.elasticsearch.core.mapping.IndexCoordinates;
 import org.springframework.data.elasticsearch.core.mapping.SimpleElasticsearchMappingContext;
 import org.springframework.data.elasticsearch.core.query.ByQueryResponse;
@@ -57,7 +54,6 @@ import org.springframework.data.elasticsearch.core.routing.RoutingResolver;
 import org.springframework.data.elasticsearch.core.script.Script;
 import org.springframework.data.elasticsearch.core.suggest.response.Suggest;
 import org.springframework.data.elasticsearch.support.VersionInfo;
-import org.springframework.data.mapping.PersistentPropertyAccessor;
 import org.springframework.data.mapping.callback.ReactiveEntityCallbacks;
 import org.springframework.lang.NonNull;
 import org.springframework.lang.Nullable;
@@ -72,9 +68,6 @@ import org.springframework.util.Assert;
  */
 abstract public class AbstractReactiveElasticsearchTemplate
 		implements ReactiveElasticsearchOperations, ApplicationContextAware {
-
-	protected static final Log QUERY_LOGGER = LogFactory
-			.getLog("org.springframework.data.elasticsearch.core.QUERY");
 
 	protected final ElasticsearchConverter converter;
 	protected final SimpleElasticsearchMappingContext mappingContext;
@@ -175,18 +168,19 @@ abstract public class AbstractReactiveElasticsearchTemplate
 	 * @return a Mono signalling finished execution
 	 * @since 4.3
 	 */
+	@SuppressWarnings("unused")
 	public Mono<Void> logVersions() {
 
-		return getVendor() //
-				.zipWith(getRuntimeLibraryVersion()) //
-				.zipWith(getClusterVersion()) //
+		return getVendor()
+				.zipWith(getRuntimeLibraryVersion())
+				.zipWith(getClusterVersion())
 				.doOnNext(objects -> VersionInfo.logVersions(objects.getT1().getT1(), objects.getT1().getT2(), objects.getT2()))
 				.then();
 	}
 
 	// endregion
 
-	// region routing
+	// region customizations
 	private void setRoutingResolver(RoutingResolver routingResolver) {
 
 		Assert.notNull(routingResolver, "routingResolver must not be null");
@@ -203,6 +197,14 @@ abstract public class AbstractReactiveElasticsearchTemplate
 		copy.setRoutingResolver(routingResolver);
 		return copy;
 	}
+
+	@Override
+	public ReactiveElasticsearchOperations withRefreshPolicy(@Nullable RefreshPolicy refreshPolicy) {
+		AbstractReactiveElasticsearchTemplate copy = copy();
+		copy.setRefreshPolicy(refreshPolicy);
+		return copy;
+	}
+
 	// endregion
 
 	// region DocumentOperations
@@ -225,42 +227,48 @@ abstract public class AbstractReactiveElasticsearchTemplate
 
 		return Flux.defer(() -> {
 			Sinks.Many<T> sink = Sinks.many().unicast().onBackpressureBuffer();
-			entities.window(bulkSize) //
-							.concatMap(flux -> flux.collectList()) //
-							.subscribe(new Subscriber<List<T>>() {
-				private Subscription subscription;
-				private AtomicBoolean upstreamComplete = new AtomicBoolean(false);
+			// noinspection ReactiveStreamsSubscriberImplementation
+			entities
+					.bufferTimeout(bulkSize, Duration.ofMillis(200), true)
+					.subscribe(new Subscriber<>() {
+						@Nullable private Subscription subscription = null;
+						private final AtomicBoolean upstreamComplete = new AtomicBoolean(false);
 
-				@Override
-				public void onSubscribe(Subscription subscription) {
-					this.subscription = subscription;
-					subscription.request(1);
-				}
+						@Override
+						public void onSubscribe(Subscription subscription) {
+							this.subscription = subscription;
+							subscription.request(1);
+						}
 
-				@Override
-				public void onNext(List<T> entityList) {
-					saveAll(entityList, index) //
-							.map(sink::tryEmitNext) //
-							.doOnComplete(() -> {
-								if (!upstreamComplete.get()) {
-									subscription.request(1);
-								} else {
-									sink.tryEmitComplete();
-								}
-							}).subscribe();
-				}
+						@Override
+						public void onNext(List<T> entityList) {
+							saveAll(entityList, index)
+									.map(sink::tryEmitNext)
+									.doOnComplete(() -> {
+										if (!upstreamComplete.get()) {
+											if (subscription == null) {
+												throw new IllegalStateException("no subscription");
+											}
+											subscription.request(1);
+										} else {
+											sink.tryEmitComplete();
+										}
+									}).subscribe();
+						}
 
-				@Override
-				public void onError(Throwable throwable) {
-					subscription.cancel();
-					sink.tryEmitError(throwable);
-				}
+						@Override
+						public void onError(Throwable throwable) {
+							if (subscription != null) {
+								subscription.cancel();
+							}
+							sink.tryEmitError(throwable);
+						}
 
-				@Override
-				public void onComplete() {
-					upstreamComplete.set(true);
-				}
-			});
+						@Override
+						public void onComplete() {
+							upstreamComplete.set(true);
+						}
+					});
 			return sink.asFlux();
 		});
 
@@ -310,51 +318,6 @@ abstract public class AbstractReactiveElasticsearchTemplate
 		return query;
 	}
 
-	protected <T> T updateIndexedObject(T entity, IndexedObjectInformation indexedObjectInformation) {
-
-		ElasticsearchPersistentEntity<?> persistentEntity = converter.getMappingContext()
-				.getPersistentEntity(entity.getClass());
-
-		if (persistentEntity != null) {
-			PersistentPropertyAccessor<Object> propertyAccessor = persistentEntity.getPropertyAccessor(entity);
-			ElasticsearchPersistentProperty idProperty = persistentEntity.getIdProperty();
-
-			// Only deal with text because ES generated Ids are strings!
-			if (indexedObjectInformation.id() != null && idProperty != null && idProperty.isReadable()
-					&& idProperty.getType().isAssignableFrom(String.class)) {
-				propertyAccessor.setProperty(idProperty, indexedObjectInformation.id());
-			}
-
-			if (indexedObjectInformation.seqNo() != null && indexedObjectInformation.primaryTerm() != null
-					&& persistentEntity.hasSeqNoPrimaryTermProperty()) {
-				ElasticsearchPersistentProperty seqNoPrimaryTermProperty = persistentEntity.getSeqNoPrimaryTermProperty();
-				// noinspection ConstantConditions
-				propertyAccessor.setProperty(seqNoPrimaryTermProperty,
-						new SeqNoPrimaryTerm(indexedObjectInformation.seqNo(), indexedObjectInformation.primaryTerm()));
-			}
-
-			if (indexedObjectInformation.version() != null && persistentEntity.hasVersionProperty()) {
-				ElasticsearchPersistentProperty versionProperty = persistentEntity.getVersionProperty();
-				// noinspection ConstantConditions
-				propertyAccessor.setProperty(versionProperty, indexedObjectInformation.version());
-			}
-
-			var indexedIndexNameProperty = persistentEntity.getIndexedIndexNameProperty();
-			if (indexedIndexNameProperty != null) {
-				propertyAccessor.setProperty(indexedIndexNameProperty, indexedObjectInformation.index());
-			}
-
-			// noinspection unchecked
-			T updatedEntity = (T) propertyAccessor.getBean();
-			return updatedEntity;
-		} else {
-			EntityOperations.AdaptableEntity<T> adaptableEntity = entityOperations.forEntity(entity,
-					converter.getConversionService(), routingResolver);
-			adaptableEntity.populateIdIfNecessary(indexedObjectInformation.id());
-		}
-		return entity;
-	}
-
 	@Override
 	public <T> Flux<MultiGetItem<T>> multiGet(Query query, Class<T> clazz) {
 		return multiGet(query, clazz, getIndexCoordinatesFor(clazz));
@@ -377,16 +340,20 @@ abstract public class AbstractReactiveElasticsearchTemplate
 		Assert.notNull(index, "index must not be null");
 
 		return maybeCallbackBeforeConvert(entity, index)
-				.flatMap(entityAfterBeforeConversionCallback -> doIndex(entityAfterBeforeConversionCallback, index)) //
+				.flatMap(entityAfterBeforeConversionCallback -> doIndex(entityAfterBeforeConversionCallback, index))
 				.map(it -> {
 					T savedEntity = it.getT1();
 					IndexResponseMetaData indexResponseMetaData = it.getT2();
-					return updateIndexedObject(savedEntity, new IndexedObjectInformation( //
-							indexResponseMetaData.id(), //
-							indexResponseMetaData.index(), //
-							indexResponseMetaData.seqNo(), //
-							indexResponseMetaData.primaryTerm(), //
-							indexResponseMetaData.version()));
+					return entityOperations.updateIndexedObject(
+							savedEntity,
+							new IndexedObjectInformation(
+									indexResponseMetaData.id(),
+									indexResponseMetaData.index(),
+									indexResponseMetaData.seqNo(),
+									indexResponseMetaData.primaryTerm(),
+									indexResponseMetaData.version()),
+							converter,
+							routingResolver);
 				}).flatMap(saved -> maybeCallbackAfterSave(saved, index));
 	}
 
@@ -470,12 +437,12 @@ abstract public class AbstractReactiveElasticsearchTemplate
 
 		SearchDocumentCallback<T> callback = new ReadSearchDocumentCallback<>(resultType, index);
 
-		return doFindForResponse(query, entityType, index) //
-				.flatMap(searchDocumentResponse -> Flux.fromIterable(searchDocumentResponse.getSearchDocuments()) //
-						.flatMap(callback::toEntity) //
-						.collectList() //
-						.map(entities -> SearchHitMapping.mappingFor(resultType, converter) //
-								.mapHits(searchDocumentResponse, entities))) //
+		return doFindForResponse(query, entityType, index)
+				.flatMap(searchDocumentResponse -> Flux.fromIterable(searchDocumentResponse.getSearchDocuments())
+						.flatMap(callback::toEntity)
+						.collectList()
+						.map(entities -> SearchHitMapping.mappingFor(resultType, converter)
+								.mapHits(searchDocumentResponse, entities)))
 				.map(searchHits -> SearchHitSupport.searchPageFor(searchHits, query.getPageable()));
 	}
 
@@ -495,17 +462,18 @@ abstract public class AbstractReactiveElasticsearchTemplate
 
 		SearchDocumentCallback<T> callback = new ReadSearchDocumentCallback<>(resultType, index);
 
-		return doFindForResponse(query, entityType, index) //
-				.flatMap(searchDocumentResponse -> Flux.fromIterable(searchDocumentResponse.getSearchDocuments()) //
-						.flatMap(callback::toEntity) //
-						.collectList() //
-						.map(entities -> SearchHitMapping.mappingFor(resultType, converter) //
-								.mapHits(searchDocumentResponse, entities))) //
+		return doFindForResponse(query, entityType, index)
+				.flatMap(searchDocumentResponse -> Flux.fromIterable(searchDocumentResponse.getSearchDocuments())
+						.flatMap(callback::toEntity)
+						.collectList()
+						.map(entities -> SearchHitMapping.mappingFor(resultType, converter)
+								.mapHits(searchDocumentResponse, entities)))
 				.map(ReactiveSearchHitSupport::searchHitsFor);
 	}
 
 	abstract protected Flux<SearchDocument> doFind(Query query, Class<?> clazz, IndexCoordinates index);
 
+	@SuppressWarnings("unused")
 	abstract protected <T> Mono<SearchDocumentResponse> doFindForResponse(Query query, Class<?> clazz,
 			IndexCoordinates index);
 
@@ -631,18 +599,21 @@ abstract public class AbstractReactiveElasticsearchTemplate
 				return Mono.empty();
 			}
 
-			return maybeCallbackAfterLoad(document, type, index) //
+			return maybeCallbackAfterLoad(document, type, index)
 					.flatMap(documentAfterLoad -> {
-
+						// noinspection DuplicatedCode
 						T entity = reader.read(type, documentAfterLoad);
-
-						IndexedObjectInformation indexedObjectInformation = new IndexedObjectInformation( //
-								documentAfterLoad.hasId() ? documentAfterLoad.getId() : null, //
-								documentAfterLoad.getIndex(), //
-								documentAfterLoad.hasSeqNo() ? documentAfterLoad.getSeqNo() : null, //
-								documentAfterLoad.hasPrimaryTerm() ? documentAfterLoad.getPrimaryTerm() : null, //
-								documentAfterLoad.hasVersion() ? documentAfterLoad.getVersion() : null); //
-						entity = updateIndexedObject(entity, indexedObjectInformation);
+						IndexedObjectInformation indexedObjectInformation = new IndexedObjectInformation(
+								documentAfterLoad.hasId() ? documentAfterLoad.getId() : null,
+								documentAfterLoad.getIndex(),
+								documentAfterLoad.hasSeqNo() ? documentAfterLoad.getSeqNo() : null,
+								documentAfterLoad.hasPrimaryTerm() ? documentAfterLoad.getPrimaryTerm() : null,
+								documentAfterLoad.hasVersion() ? documentAfterLoad.getVersion() : null);
+						entity = entityOperations.updateIndexedObject(
+								entity,
+								indexedObjectInformation,
+								converter,
+								routingResolver);
 
 						return maybeCallbackAfterConvert(entity, documentAfterLoad, index);
 					});
@@ -659,7 +630,7 @@ abstract public class AbstractReactiveElasticsearchTemplate
 		/**
 		 * converts a {@link SearchDocument} to an entity
 		 *
-		 * @param searchDocument
+		 * @param searchDocument the document to convert
 		 * @return the entity in a MOno
 		 */
 		Mono<T> toEntity(SearchDocument searchDocument);
@@ -667,8 +638,8 @@ abstract public class AbstractReactiveElasticsearchTemplate
 		/**
 		 * converts a {@link SearchDocument} into a SearchHit
 		 *
-		 * @param searchDocument
-		 * @return
+		 * @param searchDocument the document to convert
+		 * @return the converted SearchHit
 		 */
 		Mono<SearchHit<T>> toSearchHit(SearchDocument searchDocument);
 	}
@@ -747,6 +718,12 @@ abstract public class AbstractReactiveElasticsearchTemplate
 	public abstract Mono<String> getRuntimeLibraryVersion();
 
 	public abstract Mono<String> getClusterVersion();
+
+	@Nullable
+	public String getEntityRouting(Object entity) {
+		return entityOperations.forEntity(entity, converter.getConversionService(), routingResolver)
+				.getRouting();
+	}
 
 	/**
 	 * Value class to capture client independent information from a response to an index request.

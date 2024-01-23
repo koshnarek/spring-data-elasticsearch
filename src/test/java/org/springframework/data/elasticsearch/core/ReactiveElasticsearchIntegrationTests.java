@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 the original author or authors.
+ * Copyright 2018-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,10 +18,9 @@ package org.springframework.data.elasticsearch.core;
 import static java.util.Collections.*;
 import static org.assertj.core.api.Assertions.*;
 import static org.springframework.data.elasticsearch.annotations.FieldType.*;
-import static org.springframework.data.elasticsearch.core.query.StringQuery.MATCH_ALL;
+import static org.springframework.data.elasticsearch.core.IndexOperationsAdapter.*;
+import static org.springframework.data.elasticsearch.core.query.StringQuery.*;
 
-import org.assertj.core.api.InstanceOfAssertFactories;
-import org.springframework.data.elasticsearch.BulkFailureException;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
@@ -45,6 +44,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
+import org.assertj.core.api.InstanceOfAssertFactories;
 import org.json.JSONException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -60,6 +60,7 @@ import org.springframework.data.annotation.Version;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.data.elasticsearch.BulkFailureException;
 import org.springframework.data.elasticsearch.RestStatusException;
 import org.springframework.data.elasticsearch.annotations.Document;
 import org.springframework.data.elasticsearch.annotations.Field;
@@ -97,7 +98,7 @@ import org.springframework.util.StringUtils;
 @SpringIntegrationTest
 public abstract class ReactiveElasticsearchIntegrationTests {
 
-	@Autowired private ReactiveElasticsearchOperations operations;
+	@Autowired protected ReactiveElasticsearchOperations operations;
 	@Autowired private IndexNameProvider indexNameProvider;
 
 	// region Setup
@@ -105,14 +106,14 @@ public abstract class ReactiveElasticsearchIntegrationTests {
 	public void beforeEach() {
 
 		indexNameProvider.increment();
-		operations.indexOps(SampleEntity.class).createWithMapping().block();
-		operations.indexOps(IndexedIndexNameEntity.class).createWithMapping().block();
+		blocking(operations.indexOps(SampleEntity.class)).createWithMapping();
+		blocking(operations.indexOps(IndexedIndexNameEntity.class)).createWithMapping();
 	}
 
 	@Test
 	@Order(java.lang.Integer.MAX_VALUE)
 	void cleanup() {
-		operations.indexOps(IndexCoordinates.of(indexNameProvider.getPrefix() + "*")).delete().block();
+		blocking(operations.indexOps(IndexCoordinates.of(indexNameProvider.getPrefix() + '*'))).delete();
 	}
 	// endregion
 
@@ -625,7 +626,8 @@ public abstract class ReactiveElasticsearchIntegrationTests {
 				.as(StepVerifier::create)//
 				.verifyComplete();
 
-		operations.indexOps(thisIndex).refresh().then(operations.indexOps(thatIndex).refresh()).block();
+		blocking(operations.indexOps(thisIndex)).refresh();
+		blocking(operations.indexOps(thatIndex)).refresh();
 
 		Query query = getBuilderWithTermQuery("message", "test").build();
 
@@ -651,7 +653,8 @@ public abstract class ReactiveElasticsearchIntegrationTests {
 				.as(StepVerifier::create)//
 				.verifyComplete();
 
-		operations.indexOps(thisIndex).refresh().then(operations.indexOps(thatIndex).refresh()).block();
+		blocking(operations.indexOps(thisIndex)).refresh();
+		blocking(operations.indexOps(thatIndex)).refresh();
 
 		Query query = getBuilderWithTermQuery("message", "negative").build();
 
@@ -876,7 +879,7 @@ public abstract class ReactiveElasticsearchIntegrationTests {
 		original.setMessage("It's fine");
 		OptimisticEntity saved = operations.save(original).block();
 
-		operations.indexOps(OptimisticEntity.class).refresh().block();
+		blocking(operations.indexOps(OptimisticEntity.class)).refresh();
 
 		operations
 				.search(searchQueryForOne(saved.getId()), OptimisticEntity.class,
@@ -1081,14 +1084,16 @@ public abstract class ReactiveElasticsearchIntegrationTests {
 		String indexName = indexNameProvider.indexName();
 		String aliasName = indexName + "-alias";
 		ReactiveIndexOperations indexOps = operations.indexOps(EntityWithSettingsAndMappingsReactive.class);
+		var blockingIndexOps = blocking(indexOps);
 
 		// beforeEach uses SampleEntity, so recreate the index here
-		indexOps.delete().then(indexOps.createWithMapping()).block();
+		blockingIndexOps.delete();
+		blockingIndexOps.createWithMapping();
 
 		AliasActionParameters parameters = AliasActionParameters.builder().withAliases(aliasName).withIndices(indexName)
 				.withIsHidden(false).withIsWriteIndex(false).withRouting("indexrouting").withSearchRouting("searchrouting")
 				.build();
-		indexOps.alias(new AliasActions(new AliasAction.Add(parameters))).block();
+		blockingIndexOps.alias(new AliasActions(new AliasAction.Add(parameters)));
 
 		indexOps.getInformation().as(StepVerifier::create).consumeNextWith(indexInformation -> {
 			assertThat(indexInformation.getName()).isEqualTo(indexName);
@@ -1184,9 +1189,11 @@ public abstract class ReactiveElasticsearchIntegrationTests {
 				.mapToObj(SampleEntity::of) //
 				.collect(Collectors.toList());
 
-		// we add a random delay to make suure the underlying implementation handles irregular incoming data
+		// we add a random delay to make sure the underlying implementation handles irregular incoming data
 		var entities = Flux.fromIterable(entityList).concatMap(
-				entity -> Mono.just(entity).delay(Duration.ofMillis((long) (Math.random() * 10))).thenReturn(entity));
+				entity -> Mono.just(entity)
+						.delay(Duration.ofMillis((long) (Math.random() * 10)))
+						.thenReturn(entity));
 
 		operations.save(entities, SampleEntity.class).collectList() //
 				.as(StepVerifier::create) //
@@ -1219,7 +1226,7 @@ public abstract class ReactiveElasticsearchIntegrationTests {
 	// endregion
 
 	// region Helper functions
-	private SampleEntity randomEntity(String message) {
+	protected SampleEntity randomEntity(@Nullable String message) {
 
 		SampleEntity entity = new SampleEntity();
 		entity.setId(UUID.randomUUID().toString());
@@ -1507,6 +1514,14 @@ public abstract class ReactiveElasticsearchIntegrationTests {
 			this.id = id;
 			this.text = text;
 			this.seqNoPrimaryTerm = seqNoPrimaryTerm;
+		}
+
+		public ImmutableEntity withId(@Nullable String id) {
+			return new ImmutableEntity(id, this.text, this.seqNoPrimaryTerm);
+		}
+
+		public ImmutableEntity withSeqNoPrimaryTerm(@Nullable SeqNoPrimaryTerm seqNoPrimaryTerm) {
+			return new ImmutableEntity(this.id, this.text, seqNoPrimaryTerm);
 		}
 
 		public String getId() {

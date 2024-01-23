@@ -1,5 +1,5 @@
 /*
- * Copyright 2022-2023 the original author or authors.
+ * Copyright 2022-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,6 +17,7 @@ package org.springframework.data.elasticsearch.core;
 
 import static org.assertj.core.api.Assertions.*;
 import static org.skyscreamer.jsonassert.JSONAssert.*;
+import static org.springframework.data.elasticsearch.core.IndexOperationsAdapter.*;
 
 import reactor.test.StepVerifier;
 
@@ -74,19 +75,17 @@ public abstract class ReactiveSearchTemplateIntegrationTests {
 
 	@Autowired ReactiveElasticsearchOperations operations;
 	@Autowired IndexNameProvider indexNameProvider;
-	@Nullable ReactiveIndexOperations indexOperations;
 
 	@BeforeEach
 	void setUp() {
 		indexNameProvider.increment();
-		indexOperations = operations.indexOps(Person.class);
-		indexOperations.createWithMapping().block();
+		blocking(operations.indexOps(Person.class)).createWithMapping();
 	}
 
 	@Test
 	@Order(Integer.MAX_VALUE)
 	void cleanup() {
-		operations.indexOps(IndexCoordinates.of(indexNameProvider.getPrefix() + '*')).delete().block();
+		blocking(operations.indexOps(IndexCoordinates.of(indexNameProvider.getPrefix() + '*'))).delete();
 	}
 
 	@Test // #1891

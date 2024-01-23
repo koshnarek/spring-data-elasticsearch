@@ -1,5 +1,5 @@
 /*
- * Copyright 2021-2023 the original author or authors.
+ * Copyright 2021-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -34,9 +34,9 @@ public class TemporalRangePropertyValueConverter extends AbstractRangePropertyVa
 	private final List<ElasticsearchDateConverter> dateConverters;
 
 	public TemporalRangePropertyValueConverter(PersistentProperty<?> property,
-			List<ElasticsearchDateConverter> dateConverters) {
+			Class<?> genericType, List<ElasticsearchDateConverter> dateConverters) {
 
-		super(property);
+		super(property, genericType);
 
 		Assert.notEmpty(dateConverters, "dateConverters must not be empty.");
 		this.dateConverters = dateConverters;

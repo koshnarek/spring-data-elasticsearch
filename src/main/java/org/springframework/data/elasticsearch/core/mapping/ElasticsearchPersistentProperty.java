@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2023 the original author or authors.
+ * Copyright 2013-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -65,14 +65,6 @@ public interface ElasticsearchPersistentProperty extends PersistentProperty<Elas
 	 */
 	@Nullable
 	PropertyValueConverter getPropertyValueConverter();
-
-	/**
-	 * Returns true if the property may be read from the store into the entity.
-	 *
-	 * @return true if readable, false otherwise
-	 * @since 4.0
-	 */
-	boolean isReadable();
 
 	/**
 	 * @return {@literal true} if null values should be stored in Elasticsearch

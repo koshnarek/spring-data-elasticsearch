@@ -1,5 +1,5 @@
 /*
- * Copyright 2021-2023 the original author or authors.
+ * Copyright 2021-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -32,9 +32,19 @@ public abstract class AbstractRangePropertyValueConverter<T> extends AbstractPro
 	protected static final String LTE_FIELD = "lte";
 	protected static final String GT_FIELD = "gt";
 	protected static final String GTE_FIELD = "gte";
+	private final Class<?> genericType;
 
-	public AbstractRangePropertyValueConverter(PersistentProperty<?> property) {
+	/**
+	 * @param property the property this convertrer belongs to
+	 * @param genericType the generic type of the Range
+	 */
+	public AbstractRangePropertyValueConverter(PersistentProperty<?> property, Class<?> genericType) {
 		super(property);
+		this.genericType = genericType;
+	}
+
+	public Class<?> getGenericType() {
+		return genericType;
 	}
 
 	@Override
@@ -116,10 +126,6 @@ public abstract class AbstractRangePropertyValueConverter<T> extends AbstractPro
 	}
 
 	protected abstract String format(T value);
-
-	protected Class<?> getGenericType() {
-		return getProperty().getTypeInformation().getTypeArguments().get(0).getType();
-	}
 
 	protected abstract T parse(String value);
 

@@ -1,5 +1,5 @@
 /*
- * Copyright 2021-2023 the original author or authors.
+ * Copyright 2021-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -49,6 +49,7 @@ import org.springframework.util.Assert;
  * {@link org.springframework.data.elasticsearch.core.document.Document}
  *
  * @author Peter-Josef Meisch
+ * @author Haibo Liu
  * @since 4.4
  */
 final class DocumentAdapters {
@@ -73,7 +74,7 @@ final class DocumentAdapters {
 		Map<String, SearchDocumentResponse> innerHits = new LinkedHashMap<>();
 		hit.innerHits().forEach((name, innerHitsResult) -> {
 			// noinspection ReturnOfNull
-			innerHits.put(name, SearchDocumentResponseBuilder.from(innerHitsResult.hits(), null, null, null, null,
+			innerHits.put(name, SearchDocumentResponseBuilder.from(innerHitsResult.hits(), null, null, null, null, null,
 					searchDocument -> null, jsonpMapper));
 		});
 
@@ -115,8 +116,8 @@ final class DocumentAdapters {
 		if (source == null) {
 			document = Document.from(hitFieldsAsMap);
 		} else {
-			if (source instanceof EntityAsMap) {
-				document = Document.from((EntityAsMap) source);
+			if (source instanceof EntityAsMap entityAsMap) {
+				document = Document.from(entityAsMap);
 			} else if (source instanceof JsonData jsonData) {
 				document = Document.from(jsonData.to(EntityAsMap.class));
 			} else {
@@ -138,7 +139,7 @@ final class DocumentAdapters {
 		document.setPrimaryTerm(hit.primaryTerm() != null && hit.primaryTerm() > 0 ? hit.primaryTerm() : 0);
 
 		float score = hit.score() != null ? hit.score().floatValue() : Float.NaN;
-		return new SearchDocumentAdapter(document, score, hit.sort().stream().map(TypeUtils::toString).toArray(),
+		return new SearchDocumentAdapter(document, score, hit.sort().stream().map(TypeUtils::toObject).toArray(),
 				documentFields, highlightFields, innerHits, nestedMetaData, explanation, matchedQueries, hit.routing());
 	}
 

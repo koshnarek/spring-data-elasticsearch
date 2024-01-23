@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2023 the original author or authors.
+ * Copyright 2013-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,8 +14,6 @@
  * limitations under the License.
  */
 package org.springframework.data.elasticsearch.core;
-
-import java.util.Objects;
 
 import org.springframework.data.elasticsearch.core.cluster.ClusterOperations;
 import org.springframework.data.elasticsearch.core.convert.ElasticsearchConverter;
@@ -91,15 +89,24 @@ public interface ElasticsearchOperations extends DocumentOperations, SearchOpera
 	}
 	// endregion
 
-	// region routing
+	// region customizations
 	/**
 	 * Returns a copy of this instance with the same configuration, but that uses a different {@link RoutingResolver} to
 	 * obtain routing information.
 	 *
 	 * @param routingResolver the {@link RoutingResolver} value, must not be {@literal null}.
-	 * @return DocumentOperations instance
+	 * @return {@link ElasticsearchOperations} instance
 	 * @since 4.2
 	 */
 	ElasticsearchOperations withRouting(RoutingResolver routingResolver);
+
+	/**
+	 * Returns a copy of this instance with the same configuration, but that uses a different {@link RefreshPolicy}.
+	 *
+	 * @param refreshPolicy the {@link RefreshPolicy} value.
+	 * @return {@link ElasticsearchOperations} instance.
+	 * @since 5.2
+	 */
+	ElasticsearchOperations withRefreshPolicy(@Nullable RefreshPolicy refreshPolicy);
 	// endregion
 }

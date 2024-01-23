@@ -1,5 +1,5 @@
 /*
- * Copyright 2016-2023 the original author or authors.
+ * Copyright 2016-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -30,6 +30,7 @@ import org.springframework.data.elasticsearch.core.mapping.IndexCoordinates;
 import org.springframework.data.elasticsearch.junit.jupiter.SpringIntegrationTest;
 import org.springframework.data.elasticsearch.utils.IndexNameProvider;
 import org.springframework.data.repository.CrudRepository;
+import org.springframework.lang.Nullable;
 
 /**
  * @author Young Gu
@@ -88,6 +89,10 @@ public abstract class ImmutableRepositoryIntegrationTests {
 
 		public ImmutableEntity(String name) {
 			this(null, name);
+		}
+
+		public ImmutableEntity withId(@Nullable String id) {
+			return new ImmutableEntity(id, this.name);
 		}
 
 		public String getId() {

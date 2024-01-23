@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2023 the original author or authors.
+ * Copyright 2013-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -80,6 +80,7 @@ import org.springframework.util.ObjectUtils;
  * @author Marc Vanbrabant
  * @author Anton Naydenov
  * @author vdisk
+ * @author Junghoon Ban
  * @since 3.2
  */
 public class MappingElasticsearchConverter
@@ -116,8 +117,8 @@ public class MappingElasticsearchConverter
 	@Override
 	public void setApplicationContext(ApplicationContext applicationContext) throws BeansException {
 
-		if (mappingContext instanceof ApplicationContextAware) {
-			((ApplicationContextAware) mappingContext).setApplicationContext(applicationContext);
+		if (mappingContext instanceof ApplicationContextAware contextAware) {
+			contextAware.setApplicationContext(applicationContext);
 		}
 	}
 
@@ -403,7 +404,8 @@ public class MappingElasticsearchConverter
 
 			for (ElasticsearchPersistentProperty property : entity) {
 
-				if (entity.isCreatorArgument(property) || !property.isReadable() || property.isIndexedIndexNameProperty()) {
+				if (entity.isCreatorArgument(property) || !property.isReadable() || property.isSeqNoPrimaryTermProperty()
+						|| property.isIndexedIndexNameProperty()) {
 					continue;
 				}
 
@@ -502,16 +504,16 @@ public class MappingElasticsearchConverter
 		private Object propertyConverterRead(ElasticsearchPersistentProperty property, Object source) {
 			PropertyValueConverter propertyValueConverter = Objects.requireNonNull(property.getPropertyValueConverter());
 
-			if (source instanceof String[]) {
+			if (source instanceof String[] strings) {
 				// convert to a List
-				source = Arrays.asList((String[]) source);
+				source = Arrays.asList(strings);
 			}
 
-			if (source instanceof List) {
-				source = ((List<?>) source).stream().map(it -> convertOnRead(propertyValueConverter, it))
+			if (source instanceof List<?> list) {
+				source = list.stream().map(it -> convertOnRead(propertyValueConverter, it))
 						.collect(Collectors.toList());
-			} else if (source instanceof Set) {
-				source = ((Set<?>) source).stream().map(it -> convertOnRead(propertyValueConverter, it))
+			} else if (source instanceof Set<?> set) {
+				source = set.stream().map(it -> convertOnRead(propertyValueConverter, it))
 						.collect(Collectors.toSet());
 			} else {
 				source = convertOnRead(propertyValueConverter, source);
@@ -1185,8 +1187,8 @@ public class MappingElasticsearchConverter
 		 */
 		private static Collection<?> asCollection(Object source) {
 
-			if (source instanceof Collection) {
-				return (Collection<?>) source;
+			if (source instanceof Collection<?> collection) {
+				return collection;
 			}
 
 			return source.getClass().isArray() ? CollectionUtils.arrayToList(source) : Collections.singleton(source);
@@ -1200,9 +1202,9 @@ public class MappingElasticsearchConverter
 
 		Assert.notNull(query, "query must not be null");
 
-		if (query instanceof BaseQuery) {
+		if (query instanceof BaseQuery baseQuery) {
 
-			if (((BaseQuery) query).queryIsUpdatedByConverter()) {
+			if (baseQuery.queryIsUpdatedByConverter()) {
 				return;
 			}
 		}
@@ -1213,12 +1215,12 @@ public class MappingElasticsearchConverter
 
 		updatePropertiesInFieldsAndSourceFilter(query, domainClass);
 
-		if (query instanceof CriteriaQuery) {
-			updatePropertiesInCriteriaQuery((CriteriaQuery) query, domainClass);
+		if (query instanceof CriteriaQuery criteriaQuery) {
+			updatePropertiesInCriteriaQuery(criteriaQuery, domainClass);
 		}
 
-		if (query instanceof BaseQuery) {
-			((BaseQuery) query).setQueryIsUpdatedByConverter(true);
+		if (query instanceof BaseQuery baseQuery) {
+			baseQuery.setQueryIsUpdatedByConverter(true);
 		}
 	}
 

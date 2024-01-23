@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 the original author or authors.
+ * Copyright 2018-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,7 +25,6 @@ import java.util.function.Supplier;
 import javax.net.ssl.HostnameVerifier;
 import javax.net.ssl.SSLContext;
 
-import org.elasticsearch.client.RestClientBuilder.HttpClientConfigCallback;
 import org.springframework.data.elasticsearch.client.ClientConfiguration.ClientConfigurationBuilderWithRequiredEndpoint;
 import org.springframework.data.elasticsearch.client.ClientConfiguration.MaybeSecureClientConfigurationBuilder;
 import org.springframework.data.elasticsearch.client.ClientConfiguration.TerminalClientConfigurationBuilder;
@@ -103,6 +102,13 @@ class ClientConfigurationBuilder
 	public TerminalClientConfigurationBuilder usingSsl() {
 
 		this.useSsl = true;
+		return this;
+	}
+
+	@Override
+	public TerminalClientConfigurationBuilder usingSsl(boolean flag) {
+
+		this.useSsl = flag;
 		return this;
 	}
 

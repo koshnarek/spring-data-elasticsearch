@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 the original author or authors.
+ * Copyright 2018-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -232,6 +232,15 @@ public interface ClientConfiguration {
 		 * @return the {@link TerminalClientConfigurationBuilder}.
 		 */
 		TerminalClientConfigurationBuilder usingSsl();
+
+		/**
+		 * Connects using https if flag is true.
+		 *
+		 * @param flag whether to use https in the connection
+		 * @return the {@link TerminalClientConfigurationBuilder}
+		 * @since 5.3
+		 */
+		TerminalClientConfigurationBuilder usingSsl(boolean flag);
 
 		/**
 		 * Connect via {@literal https} using the given {@link SSLContext}.<br />

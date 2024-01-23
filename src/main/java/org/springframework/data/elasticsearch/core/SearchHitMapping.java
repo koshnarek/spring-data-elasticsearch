@@ -1,5 +1,5 @@
 /*
- * Copyright 2020-2023 the original author or authors.
+ * Copyright 2020-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -46,6 +46,7 @@ import org.springframework.util.Assert;
  * @author Matt Gilene
  * @author Sascha Woo
  * @author Jakob Hoeper
+ * @author Haibo Liu
  * @since 4.0
  */
 public class SearchHitMapping<T> {
@@ -84,6 +85,7 @@ public class SearchHitMapping<T> {
 				"Count of documents must match the count of entities");
 
 		long totalHits = searchDocumentResponse.getTotalHits();
+		SearchShardStatistics shardStatistics = searchDocumentResponse.getSearchShardStatistics();
 		float maxScore = searchDocumentResponse.getMaxScore();
 		String scrollId = searchDocumentResponse.getScrollId();
 		String pointInTimeId = searchDocumentResponse.getPointInTimeId();
@@ -103,7 +105,7 @@ public class SearchHitMapping<T> {
 		mapHitsInCompletionSuggestion(suggest);
 
 		return new SearchHitsImpl<>(totalHits, totalHitsRelation, maxScore, scrollId, pointInTimeId, searchHits,
-				aggregations, suggest);
+				aggregations, suggest, shardStatistics);
 	}
 
 	@SuppressWarnings("unchecked")
@@ -229,18 +231,19 @@ public class SearchHitMapping<T> {
 				});
 
 				String scrollId = null;
-				if (searchHits instanceof SearchHitsImpl) {
-					scrollId = ((SearchHitsImpl<?>) searchHits).getScrollId();
+				if (searchHits instanceof SearchHitsImpl<?> searchHitsImpl) {
+					scrollId = searchHitsImpl.getScrollId();
 				}
 
-				return new SearchHitsImpl<>(searchHits.getTotalHits(), //
-						searchHits.getTotalHitsRelation(), //
-						searchHits.getMaxScore(), //
-						scrollId, //
-						searchHits.getPointInTimeId(), //
-						convertedSearchHits, //
-						searchHits.getAggregations(), //
-						searchHits.getSuggest());
+				return new SearchHitsImpl<>(searchHits.getTotalHits(),
+						searchHits.getTotalHitsRelation(),
+						searchHits.getMaxScore(),
+						scrollId,
+						searchHits.getPointInTimeId(),
+						convertedSearchHits,
+						searchHits.getAggregations(),
+						searchHits.getSuggest(),
+						searchHits.getSearchShardStatistics());
 			}
 		} catch (Exception e) {
 			throw new UncategorizedElasticsearchException("Unable to convert inner hits.", e);

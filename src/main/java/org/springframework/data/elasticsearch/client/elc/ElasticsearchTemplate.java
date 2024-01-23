@@ -1,5 +1,5 @@
 /*
- * Copyright 2021-2023 the original author or authors.
+ * Copyright 2021-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,7 +15,7 @@
  */
 package org.springframework.data.elasticsearch.client.elc;
 
-import static org.springframework.data.elasticsearch.client.elc.TypeUtils.result;
+import static org.springframework.data.elasticsearch.client.elc.TypeUtils.*;
 
 import co.elastic.clients.elasticsearch.ElasticsearchClient;
 import co.elastic.clients.elasticsearch._types.Time;
@@ -28,20 +28,37 @@ import co.elastic.clients.transport.Version;
 
 import java.io.IOException;
 import java.time.Duration;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.springframework.data.elasticsearch.BulkFailureException;
 import org.springframework.data.elasticsearch.client.UnsupportedBackendOperation;
-import org.springframework.data.elasticsearch.core.*;
+import org.springframework.data.elasticsearch.core.AbstractElasticsearchTemplate;
+import org.springframework.data.elasticsearch.core.IndexOperations;
+import org.springframework.data.elasticsearch.core.IndexedObjectInformation;
+import org.springframework.data.elasticsearch.core.MultiGetItem;
+import org.springframework.data.elasticsearch.core.SearchHits;
+import org.springframework.data.elasticsearch.core.SearchScrollHits;
 import org.springframework.data.elasticsearch.core.cluster.ClusterOperations;
 import org.springframework.data.elasticsearch.core.convert.ElasticsearchConverter;
 import org.springframework.data.elasticsearch.core.document.Document;
 import org.springframework.data.elasticsearch.core.document.SearchDocumentResponse;
 import org.springframework.data.elasticsearch.core.mapping.IndexCoordinates;
-import org.springframework.data.elasticsearch.core.query.*;
+import org.springframework.data.elasticsearch.core.query.BaseQueryBuilder;
+import org.springframework.data.elasticsearch.core.query.BulkOptions;
+import org.springframework.data.elasticsearch.core.query.ByQueryResponse;
+import org.springframework.data.elasticsearch.core.query.IndexQuery;
+import org.springframework.data.elasticsearch.core.query.MoreLikeThisQuery;
+import org.springframework.data.elasticsearch.core.query.Query;
+import org.springframework.data.elasticsearch.core.query.SearchTemplateQuery;
+import org.springframework.data.elasticsearch.core.query.UpdateQuery;
 import org.springframework.data.elasticsearch.core.query.UpdateResponse;
 import org.springframework.data.elasticsearch.core.reindex.ReindexRequest;
 import org.springframework.data.elasticsearch.core.reindex.ReindexResponse;
@@ -56,6 +73,7 @@ import org.springframework.util.Assert;
  * @author Peter-Josef Meisch
  * @author Hamid Rahimi
  * @author Illia Ulianov
+ * @author Haibo Liu
  * @since 4.4
  */
 public class ElasticsearchTemplate extends AbstractElasticsearchTemplate {
@@ -125,7 +143,7 @@ public class ElasticsearchTemplate extends AbstractElasticsearchTemplate {
 	public <T> T get(String id, Class<T> clazz, IndexCoordinates index) {
 
 		GetRequest getRequest = requestConverter.documentGetRequest(elasticsearchConverter.convertId(id),
-				routingResolver.getRouting(), index, false);
+				routingResolver.getRouting(), index);
 		GetResponse<EntityAsMap> getResponse = execute(client -> client.get(getRequest, EntityAsMap.class));
 
 		ReadDocumentCallback<T> callback = new ReadDocumentCallback<>(elasticsearchConverter, clazz, index);
@@ -208,8 +226,16 @@ public class ElasticsearchTemplate extends AbstractElasticsearchTemplate {
 		Object queryObject = query.getObject();
 
 		if (queryObject != null) {
-			query.setObject(updateIndexedObject(queryObject, new IndexedObjectInformation(indexResponse.id(),
-					indexResponse.index(), indexResponse.seqNo(), indexResponse.primaryTerm(), indexResponse.version())));
+			query.setObject(entityOperations.updateIndexedObject(
+					queryObject,
+					new IndexedObjectInformation(
+							indexResponse.id(),
+							indexResponse.index(),
+							indexResponse.seqNo(),
+							indexResponse.primaryTerm(),
+							indexResponse.version()),
+					elasticsearchConverter,
+					routingResolver));
 		}
 
 		return indexResponse.id();
@@ -221,9 +247,9 @@ public class ElasticsearchTemplate extends AbstractElasticsearchTemplate {
 		Assert.notNull(id, "id must not be null");
 		Assert.notNull(index, "index must not be null");
 
-		GetRequest request = requestConverter.documentGetRequest(id, routingResolver.getRouting(), index, true);
+		ExistsRequest request = requestConverter.documentExistsRequest(id, routingResolver.getRouting(), index);
 
-		return execute(client -> client.get(request, EntityAsMap.class)).found();
+		return execute(client -> client.exists(request)).value();
 	}
 
 	@Override
@@ -413,13 +439,10 @@ public class ElasticsearchTemplate extends AbstractElasticsearchTemplate {
 		Assert.notNull(queries, "queries must not be null");
 		Assert.notNull(clazz, "clazz must not be null");
 
-		List<MultiSearchQueryParameter> multiSearchQueryParameters = new ArrayList<>(queries.size());
-		for (Query query : queries) {
-			multiSearchQueryParameters.add(new MultiSearchQueryParameter(query, clazz, getIndexCoordinatesFor(clazz)));
-		}
-
+		int size = queries.size();
 		// noinspection unchecked
-		return doMultiSearch(multiSearchQueryParameters).stream().map(searchHits -> (SearchHits<T>) searchHits)
+		return multiSearch(queries, Collections.nCopies(size, clazz), Collections.nCopies(size, index))
+				.stream().map(searchHits -> (SearchHits<T>) searchHits)
 				.collect(Collectors.toList());
 	}
 
@@ -430,14 +453,7 @@ public class ElasticsearchTemplate extends AbstractElasticsearchTemplate {
 		Assert.notNull(classes, "classes must not be null");
 		Assert.isTrue(queries.size() == classes.size(), "queries and classes must have the same size");
 
-		List<MultiSearchQueryParameter> multiSearchQueryParameters = new ArrayList<>(queries.size());
-		Iterator<Class<?>> it = classes.iterator();
-		for (Query query : queries) {
-			Class<?> clazz = it.next();
-			multiSearchQueryParameters.add(new MultiSearchQueryParameter(query, clazz, getIndexCoordinatesFor(clazz)));
-		}
-
-		return doMultiSearch(multiSearchQueryParameters);
+		return multiSearch(queries, classes, classes.stream().map(this::getIndexCoordinatesFor).toList());
 	}
 
 	@Override
@@ -449,14 +465,7 @@ public class ElasticsearchTemplate extends AbstractElasticsearchTemplate {
 		Assert.notNull(index, "index must not be null");
 		Assert.isTrue(queries.size() == classes.size(), "queries and classes must have the same size");
 
-		List<MultiSearchQueryParameter> multiSearchQueryParameters = new ArrayList<>(queries.size());
-		Iterator<Class<?>> it = classes.iterator();
-		for (Query query : queries) {
-			Class<?> clazz = it.next();
-			multiSearchQueryParameters.add(new MultiSearchQueryParameter(query, clazz, index));
-		}
-
-		return doMultiSearch(multiSearchQueryParameters);
+		return multiSearch(queries, classes, Collections.nCopies(queries.size(), index));
 	}
 
 	@Override
@@ -473,16 +482,49 @@ public class ElasticsearchTemplate extends AbstractElasticsearchTemplate {
 		Iterator<Class<?>> it = classes.iterator();
 		Iterator<IndexCoordinates> indexesIt = indexes.iterator();
 
+		Assert.isTrue(!queries.isEmpty(), "queries should have at least 1 query");
+		boolean isSearchTemplateQuery = queries.get(0) instanceof SearchTemplateQuery;
+
 		for (Query query : queries) {
+			Assert.isTrue((query instanceof SearchTemplateQuery) == isSearchTemplateQuery,
+					"SearchTemplateQuery can't be mixed with other types of query in multiple search");
+
 			Class<?> clazz = it.next();
 			IndexCoordinates index = indexesIt.next();
 			multiSearchQueryParameters.add(new MultiSearchQueryParameter(query, clazz, index));
 		}
 
-		return doMultiSearch(multiSearchQueryParameters);
+		return multiSearch(multiSearchQueryParameters, isSearchTemplateQuery);
 	}
 
-	@SuppressWarnings({ "unchecked", "rawtypes" })
+	private List<SearchHits<?>> multiSearch(List<MultiSearchQueryParameter> multiSearchQueryParameters,
+			boolean isSearchTemplateQuery) {
+		return isSearchTemplateQuery ?
+				doMultiTemplateSearch(multiSearchQueryParameters.stream()
+						.map(p -> new MultiSearchTemplateQueryParameter((SearchTemplateQuery) p.query, p.clazz, p.index))
+						.toList())
+				: doMultiSearch(multiSearchQueryParameters);
+	}
+
+	private List<SearchHits<?>> doMultiTemplateSearch(List<MultiSearchTemplateQueryParameter> mSearchTemplateQueryParameters) {
+		MsearchTemplateRequest request = requestConverter.searchMsearchTemplateRequest(mSearchTemplateQueryParameters,
+				routingResolver.getRouting());
+
+		MsearchTemplateResponse<EntityAsMap> response = execute(client -> client.msearchTemplate(request, EntityAsMap.class));
+		List<MultiSearchResponseItem<EntityAsMap>> responseItems = response.responses();
+
+		Assert.isTrue(mSearchTemplateQueryParameters.size() == responseItems.size(),
+				"number of response items does not match number of requests");
+
+		int size = mSearchTemplateQueryParameters.size();
+		List<Class<?>> classes = mSearchTemplateQueryParameters
+				.stream().map(MultiSearchTemplateQueryParameter::clazz).collect(Collectors.toList());
+		List<IndexCoordinates> indices = mSearchTemplateQueryParameters
+				.stream().map(MultiSearchTemplateQueryParameter::index).collect(Collectors.toList());
+
+		return getSearchHitsFromMsearchResponse(size, classes, indices, responseItems);
+	}
+
 	private List<SearchHits<?>> doMultiSearch(List<MultiSearchQueryParameter> multiSearchQueryParameters) {
 
 		MsearchRequest request = requestConverter.searchMsearchRequest(multiSearchQueryParameters,
@@ -494,22 +536,37 @@ public class ElasticsearchTemplate extends AbstractElasticsearchTemplate {
 		Assert.isTrue(multiSearchQueryParameters.size() == responseItems.size(),
 				"number of response items does not match number of requests");
 
-		List<SearchHits<?>> searchHitsList = new ArrayList<>(multiSearchQueryParameters.size());
+		int size = multiSearchQueryParameters.size();
+		List<Class<?>> classes = multiSearchQueryParameters
+				.stream().map(MultiSearchQueryParameter::clazz).collect(Collectors.toList());
+		List<IndexCoordinates> indices = multiSearchQueryParameters
+				.stream().map(MultiSearchQueryParameter::index).collect(Collectors.toList());
 
-		Iterator<MultiSearchQueryParameter> queryIterator = multiSearchQueryParameters.iterator();
+		return getSearchHitsFromMsearchResponse(size, classes, indices, responseItems);
+	}
+
+	/**
+	 * {@link MsearchResponse} and {@link MsearchTemplateResponse} share the same {@link MultiSearchResponseItem}
+	 */
+	@SuppressWarnings({ "unchecked", "rawtypes" })
+	private List<SearchHits<?>> getSearchHitsFromMsearchResponse(int size, List<Class<?>> classes,
+			List<IndexCoordinates> indices, List<MultiSearchResponseItem<EntityAsMap>> responseItems) {
+		List<SearchHits<?>> searchHitsList = new ArrayList<>(size);
+		Iterator<Class<?>> clazzIter = classes.iterator();
+		Iterator<IndexCoordinates> indexIter = indices.iterator();
 		Iterator<MultiSearchResponseItem<EntityAsMap>> responseIterator = responseItems.iterator();
 
-		while (queryIterator.hasNext()) {
-			MultiSearchQueryParameter queryParameter = queryIterator.next();
+		while (clazzIter.hasNext() && indexIter.hasNext()) {
 			MultiSearchResponseItem<EntityAsMap> responseItem = responseIterator.next();
 
 			if (responseItem.isResult()) {
 
-				Class clazz = queryParameter.clazz;
+				Class clazz = clazzIter.next();
+				IndexCoordinates index = indexIter.next();
 				ReadDocumentCallback<?> documentCallback = new ReadDocumentCallback<>(elasticsearchConverter, clazz,
-						queryParameter.index);
+						index);
 				SearchDocumentResponseCallback<SearchHits<?>> callback = new ReadSearchDocumentResponseCallback<>(clazz,
-						queryParameter.index);
+						index);
 
 				SearchHits<?> searchHits = callback.doWith(
 						SearchDocumentResponseBuilder.from(responseItem.result(), getEntityCreator(documentCallback), jsonpMapper));
@@ -517,8 +574,8 @@ public class ElasticsearchTemplate extends AbstractElasticsearchTemplate {
 				searchHitsList.add(searchHits);
 			} else {
 				if (LOGGER.isWarnEnabled()) {
-					LOGGER
-							.warn(String.format("multisearch responsecontains failure: {}", responseItem.failure().error().reason()));
+					LOGGER.warn(String.format("multisearch response contains failure: %s",
+							responseItem.failure().error().reason()));
 				}
 			}
 		}
@@ -530,6 +587,12 @@ public class ElasticsearchTemplate extends AbstractElasticsearchTemplate {
 	 * value class combining the information needed for a single query in a multisearch request.
 	 */
 	record MultiSearchQueryParameter(Query query, Class<?> clazz, IndexCoordinates index) {
+	}
+
+	/**
+	 * value class combining the information needed for a single query in a template multisearch request.
+	 */
+	record MultiSearchTemplateQueryParameter(SearchTemplateQuery query, Class<?> clazz, IndexCoordinates index) {
 	}
 
 	@Override

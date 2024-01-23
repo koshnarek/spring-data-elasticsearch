@@ -1,5 +1,5 @@
 /*
- * Copyright 2021-2023 the original author or authors.
+ * Copyright 2021-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -40,6 +40,7 @@ import org.springframework.data.elasticsearch.VersionConflictException;
  * appropriate: any other exception may have resulted from user code, and should not be translated.
  *
  * @author Peter-Josef Meisch
+ * @author Junghoon Ban
  * @since 4.4
  */
 public class ElasticsearchExceptionTranslator implements PersistenceExceptionTranslator {
@@ -59,7 +60,7 @@ public class ElasticsearchExceptionTranslator implements PersistenceExceptionTra
 	 */
 	public RuntimeException translateException(Throwable throwable) {
 
-		RuntimeException runtimeException = throwable instanceof RuntimeException ? (RuntimeException) throwable
+		RuntimeException runtimeException = throwable instanceof RuntimeException ex ? ex
 				: new RuntimeException(throwable.getMessage(), throwable);
 		RuntimeException potentiallyTranslatedException = translateExceptionIfPossible(runtimeException);
 
